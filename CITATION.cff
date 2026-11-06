@@ -3,7 +3,7 @@ message: "If nullfinder-proto is used in published scientific work, please cite 
 title: "nullfinder-proto: A parallel Python toolkit to find and classify magnetic null points in MHD simulations"
 type: software
 authors:
-  - family-names: "Nóbrega Siverio"
+  - family-names: "Nóbrega-Siverio"
     given-names: "Daniel"
 version: "0.1.0"
 repository-code: "https://github.com/dnobrega/nullfinder-proto"

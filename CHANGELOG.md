@@ -35,6 +35,10 @@ Changes with respect to the original single-file `null_finder.py`.
   for potential nulls.
 
 ### Added
+- Candidate cells with NaN/Inf vertex values are skipped before Newton (an
+  infinite vertex made the relative tolerance infinite and produced spurious
+  nulls). Field values are not validated globally, to avoid an extra pass
+  over the data.
 - Exact exclusion test by Bernstein subdivision (`exclusion_depth`, default 3):
   removes ~77 % of the sign-change candidates before Newton without losing
   roots, about 3× faster refinement.
@@ -42,7 +46,6 @@ Changes with respect to the original single-file `null_finder.py`.
 - Chunked refinement (`chunk_size`): memory no longer grows with the total
   number of candidates.
 - Any memory layout is accepted without copying (C, Fortran, strided).
-- `check_finite` (default True): NaN/Inf in the field raise `ValueError`.
 - `pad_periodic` helper for periodic axes.
 - `current_spine_angle_deg`, `nearest_opposite_distance_cells`,
   `opposite_pair_index`, `opposite_pair_distance_cells`, `n_degenerate`,

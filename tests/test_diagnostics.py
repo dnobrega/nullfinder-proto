@@ -137,19 +137,36 @@ def test_topology_report_runs(capsys):
         nf.topology_report(r, use="foo", verbose=False)
 
 
-def test_rejects_nonfinite_and_bad_coordinates():
+def test_rejects_bad_coordinates_and_tolerances():
     x = np.arange(5.0)
     b = np.ones((5, 5, 5))
-    bad = b.copy()
-    bad[2, 2, 2] = np.nan
-    with pytest.raises(ValueError, match="Non-finite"):
-        run(bad, b, b, x, x, x)
     with pytest.raises(ValueError, match="monotonic"):
         run(b, b, b, np.array([0, 1, 1, 2, 3.0]), x, x)
     with pytest.raises(ValueError, match="Coordinate sizes"):
         run(b, b, b, np.arange(6.0), x, x)
     with pytest.raises(ValueError, match="cannot both be 0"):
         run(b, b, b, x, x, x, b_tol=0.0, b_tol_rel=0.0)
+
+
+def test_nonfinite_values_never_create_nulls():
+    # Input is not validated: non-finite values must not create nulls or crash,
+    # and nulls away from them must still be found.
+    x, y, z = offset_grid()
+    B = sample(pair_field, x, y, z)
+    ref = run(*B, x, y, z)
+    for bad in (np.nan, np.inf):
+        Bb = [b.copy(order="F") for b in B]
+        Bb[0][:4, :4, :4] = bad  # far from both nulls
+        r = run(*Bb, x, y, z)
+        np.testing.assert_array_equal(r["pos"], ref["pos"])
+        # A non-finite vertex in the cell of one null: that null is lost,
+        # nothing spurious appears.
+        Bc = [b.copy(order="F") for b in B]
+        i, j, k = ref["cell"][0]
+        Bc[1][i, j, k] = bad
+        r = run(*Bc, x, y, z)
+        assert len(r["pos"]) == 1
+        np.testing.assert_allclose(r["pos"][0], ref["pos"][1])
 
 
 def test_classify_false_keeps_divergence():

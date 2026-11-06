@@ -120,6 +120,9 @@ res = find_magnetic_nulls(*pad_periodic(bx, by, bz, x, y, z, axes=(0, 1)))
 - Nulls are those of the trilinear interpolant. Structures below the grid
   scale are not represented, and close pairs (`unresolved`) should be treated
   with care.
+- Field values are not validated (no extra pass over the data). Cells with a
+  NaN or infinite vertex value are skipped, so such values never produce a
+  null, but nulls in those cells are missed.
 
 ## Performance
 

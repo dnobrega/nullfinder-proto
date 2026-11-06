@@ -410,41 +410,23 @@ def _cell_bscale(bx, by, bz, i, j, k):
     return bmax
 
 
-# ============================================================
-# 3. Input checks
-# ============================================================
-
-
-@njit(parallel=True, cache=NUMBA_CACHE)
-def _count_nonfinite_f(a):
-    nx, ny, nz = a.shape
-    n = 0
-    for k in prange(nz):
-        for j in range(ny):
-            for i in range(nx):
-                if not np.isfinite(a[i, j, k]):
-                    n += 1
-    return n
-
-
-@njit(parallel=True, cache=NUMBA_CACHE)
-def _count_nonfinite_c(a):
-    nx, ny, nz = a.shape
-    n = 0
-    for i in prange(nx):
-        for j in range(ny):
-            for k in range(nz):
-                if not np.isfinite(a[i, j, k]):
-                    n += 1
-    return n
-
-
-def _count_nonfinite(a):
-    return int(_count_nonfinite_c(a) if _is_c_layout(a) else _count_nonfinite_f(a))
+@njit(cache=NUMBA_CACHE, fastmath=FASTMATH)
+def _cell_is_finite(bx, by, bz, i, j, k):
+    """True if all 24 vertex values of the cell are finite."""
+    for dz in range(2):
+        for dy in range(2):
+            for dx in range(2):
+                if not (
+                    np.isfinite(bx[i + dx, j + dy, k + dz])
+                    and np.isfinite(by[i + dx, j + dy, k + dz])
+                    and np.isfinite(bz[i + dx, j + dy, k + dz])
+                ):
+                    return False
+    return True
 
 
 # ============================================================
-# 4. Candidate cells
+# 3. Candidate cells
 # ============================================================
 
 
@@ -561,7 +543,7 @@ def get_candidate_cells(bx, by, bz):
 
 
 # ============================================================
-# 5. Exact exclusion by Bernstein subdivision
+# 4. Exact exclusion by Bernstein subdivision
 # ============================================================
 
 
@@ -645,7 +627,7 @@ def _exclusion_filter(bx, by, bz, candidates, depth, b_tol_abs, b_tol_rel):
 
 
 # ============================================================
-# 6. Newton refinement
+# 5. Newton refinement
 # ============================================================
 
 
@@ -861,6 +843,11 @@ def _refine_candidates(
         j = candidates[m, 1]
         k = candidates[m, 2]
         base = m * max_roots_per_cell
+        # Cells with a NaN/Inf vertex are skipped: an infinite vertex would make
+        # the relative tolerance infinite and accept any point.  The field is not
+        # validated globally, so this check only costs 24 reads per refined cell.
+        if not _cell_is_finite(bx, by, bz, i, j, k):
+            continue
         b_tol_eff = b_tol_abs + b_tol_rel * _cell_bscale(bx, by, bz, i, j, k)
 
         B = np.empty(3, dtype=WORK_DTYPE)
@@ -1025,7 +1012,7 @@ def _refine_in_chunks(
 
 
 # ============================================================
-# 7. Duplicate removal
+# 6. Duplicate removal
 # ============================================================
 
 
@@ -1109,7 +1096,7 @@ def _remove_duplicate_nulls(
 
 
 # ============================================================
-# 8. Poincare index (adaptive)
+# 7. Poincare index (adaptive)
 # ============================================================
 
 
@@ -1293,7 +1280,7 @@ def _compute_poincare_for_cells(bx, by, bz, x, y, z, cells, max_depth, cos_tol):
 
 
 # ============================================================
-# 9. Classification and current/divergence diagnostics
+# 8. Classification and current/divergence diagnostics
 # ============================================================
 
 
@@ -1463,7 +1450,7 @@ def _classify_nulls(
 
 
 # ============================================================
-# 10. Opposite-charge resolution diagnostics
+# 9. Opposite-charge resolution diagnostics
 # ============================================================
 
 
@@ -1599,7 +1586,7 @@ def _add_resolution_diagnostics(
 
 
 # ============================================================
-# 11. Reports and helpers
+# 10. Reports and helpers
 # ============================================================
 
 
@@ -1827,7 +1814,7 @@ def pad_periodic(bx, by, bz, x, y, z, axes=(0, 1), periods=None):
 
 
 # ============================================================
-# 12. Public API
+# 11. Public API
 # ============================================================
 
 
@@ -1858,7 +1845,6 @@ def find_magnetic_nulls(
     div_tol_rel=0.1,
     classify_traceless=False,
     field_dtype=None,
-    check_finite=True,
     max_roots_per_cell=8,
     root_duplicate_q_tol=1.0e-6,
     refine_parallel="auto",
@@ -1937,8 +1923,6 @@ def find_magnetic_nulls(
     field_dtype : numpy dtype or None
         Force the working field dtype.  None keeps the common input dtype
         (float32 stays float32).  Newton always works in float64.
-    check_finite : bool
-        Raise ValueError if any field value is NaN or infinite.
     max_roots_per_cell : int
         Distinct roots kept per candidate cell.  A trilinear cell has at most
         6 isolated roots; ``n_cells_root_overflow > 0`` therefore indicates a
@@ -2048,6 +2032,11 @@ def find_magnetic_nulls(
     * Degenerate nulls (line or sheet nulls, det J = 0, e.g. 2.5D fields) are
       not reported: Newton cannot converge to a non-isolated root.
     * Periodic seam cells are not scanned; use :func:`pad_periodic`.
+    * Field values are not validated, so that the routine never pays for an
+      extra pass over the data.  Candidate cells with a NaN or infinite
+      vertex are skipped before Newton, so non-finite values never produce a
+      null, but nulls in the affected cells are silently missed; check the
+      input beforehand if it may contain such values.
     """
     t_start = time.perf_counter()
     poincare_diag = _parse_bool(poincare_diag, "poincare_diag")
@@ -2096,11 +2085,6 @@ def find_magnetic_nulls(
             f"Coordinate sizes must match bx.shape={bx.shape}: "
             f"x.size={x.size}, y.size={y.size}, z.size={z.size}."
         )
-    if check_finite:
-        bad = {n: _count_nonfinite(a) for n, a in (("bx", bx), ("by", by), ("bz", bz))}
-        bad = {n: c for n, c in bad.items() if c}
-        if bad:
-            raise ValueError(f"Non-finite field values found: {bad}.")
     t_prep = time.perf_counter() - t_start
 
     # --- candidates and exclusion ------------------------------------------

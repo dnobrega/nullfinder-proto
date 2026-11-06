@@ -1,4 +1,8 @@
-"""Robust magnetic null finder for rectilinear 3D grids (trilinear + Newton)."""
+"""nullfinder-proto: a parallel Python toolkit to find and classify magnetic null
+points in MHD simulations on Cartesian (uniform or stretched) grids.
+
+Import as ``import nullfinder_proto``.
+"""
 
 from .core import (
     NULL_TYPE_A,

@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from conftest import offset_grid, pair_field, run, sample
 
-import null_finder as nf
+import nullfinder_proto as nf
 
 
 def test_pair_positions_charges_types():

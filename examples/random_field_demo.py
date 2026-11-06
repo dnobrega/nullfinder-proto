@@ -7,7 +7,7 @@ import sys
 
 import numpy as np
 
-from null_finder import (
+from nullfinder_proto import (
     find_magnetic_nulls,
     null_type_name,
     pad_periodic,

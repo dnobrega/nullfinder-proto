@@ -41,7 +41,7 @@ def random_field():
 
 
 def run(bx, by, bz, x, y, z, **kw):
-    from null_finder import find_magnetic_nulls
+    from nullfinder_proto import find_magnetic_nulls
 
     kw.setdefault("verbose", False)
     return find_magnetic_nulls(bx, by, bz, x, y, z, **kw)

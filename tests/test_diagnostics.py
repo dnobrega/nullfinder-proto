@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from conftest import offset_grid, pair_field, random_solenoidal, run, sample
 
-import null_finder as nf
+import nullfinder_proto as nf
 
 
 def test_poincare_matches_charge_in_random_field(random_field):

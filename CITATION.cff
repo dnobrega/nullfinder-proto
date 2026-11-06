@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
-title: "null-finder: robust magnetic null finder for 3D MHD simulations on rectilinear grids"
+title: "nullfinder-proto: a parallel Python toolkit to find and classify magnetic null points in MHD simulations on Cartesian grids"
 type: software
 version: 0.1.0
 authors:
@@ -11,6 +11,8 @@ authors:
   - family-names: "Moreno-Insertis"
     given-names: "Fernando"
     affiliation: "Instituto de Astrofísica de Canarias"
+repository-code: "https://github.com/dnobrega/nullfinder-proto"
+url: "https://github.com/dnobrega/nullfinder-proto"
 keywords:
   - MHD
   - magnetic null points

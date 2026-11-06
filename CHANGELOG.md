@@ -2,7 +2,8 @@
 
 ## 0.1.0 — first public version
 
-Changes with respect to the original single-file `null_finder.py`.
+Changes with respect to the original single-file `null_finder.py`. The
+package is distributed as `nullfinder-proto` and imported as `nullfinder_proto`.
 
 ### Fixed
 - **Poincaré sign with decreasing axes.** The index was computed in index-space

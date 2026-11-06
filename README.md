@@ -1,7 +1,6 @@
-# null-finder
+# nullfinder-proto
 
-Robust detection and classification of magnetic null points in 3D MHD
-simulation snapshots on rectilinear (uniform or stretched) Cartesian grids.
+A parallel Python toolkit to find and classify magnetic null points in MHD simulations on Cartesian (uniform or stretched) grids.
 
 The field is represented by its trilinear interpolant in every grid cell.
 Null points are the roots of that interpolant, located with a multi-start
@@ -33,7 +32,7 @@ Centre for Solar Physics, University of Oslo) and Fernando Moreno-Insertis
 ## Installation
 
 ```bash
-pip install git+https://github.com/<user>/null-finder.git
+pip install git+https://github.com/dnobrega/nullfinder-proto.git
 # or, from a clone
 pip install -e ".[test]"
 ```
@@ -46,7 +45,7 @@ package directory is read-only, set `NUMBA_CACHE_DIR` to a writable folder.
 
 ```python
 import numpy as np
-from null_finder import find_magnetic_nulls, topology_report
+from nullfinder_proto import find_magnetic_nulls, topology_report
 
 # bx, by, bz: arrays of shape (nx, ny, nz), sampled at the nodes (x[i], y[j], z[k])
 res = find_magnetic_nulls(bx, by, bz, x, y, z)
@@ -97,7 +96,7 @@ have arbitrary sign; so does `j_parallel` (use its absolute value).
 seam cells of a periodic axis are skipped. Use `pad_periodic` first:
 
 ```python
-from null_finder import pad_periodic
+from nullfinder_proto import pad_periodic
 
 res = find_magnetic_nulls(*pad_periodic(bx, by, bz, x, y, z, axes=(0, 1)))
 ```

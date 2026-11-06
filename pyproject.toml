@@ -3,9 +3,9 @@ requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "null-finder"
+name = "nullfinder-proto"
 version = "0.1.0"
-description = "Robust magnetic null finder and classifier for 3D MHD simulations on rectilinear grids"
+description = "A parallel Python toolkit to find and classify magnetic null points in MHD simulations on Cartesian (uniform or stretched) grids."
 readme = "README.md"
 authors = [
     { name = "Daniel Nóbrega-Siverio", email = "dnobregasiverio@cea.fr" },
@@ -24,6 +24,10 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Astronomy",
     "Topic :: Scientific/Engineering :: Physics",
 ]
+
+[project.urls]
+Repository = "https://github.com/dnobrega/nullfinder-proto"
+Issues = "https://github.com/dnobrega/nullfinder-proto/issues"
 
 [project.optional-dependencies]
 test = ["pytest>=7"]
@@ -44,4 +48,4 @@ target-version = "py310"
 select = ["E", "F", "W", "I", "B", "C4", "UP", "RUF", "PT"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["null_finder"]
+known-first-party = ["nullfinder_proto"]

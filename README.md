@@ -8,9 +8,16 @@ Newton method, and everything reported about them (Jacobian, eigenvalues,
 null type, spine and fan, currents) comes from the same local representation,
 so the results are mutually consistent.
 
-**Authors:** Daniel Nóbrega-Siverio (Université Paris-Saclay, CEA, AIM; Rosseland
-Centre for Solar Physics, University of Oslo) and Fernando Moreno-Insertis
-(Instituto de Astrofísica de Canarias; Universidad de La Laguna).
+**Author:** Daniel Nóbrega-Siverio (Université Paris-Saclay, CEA, AIM; Rosseland
+Centre for Solar Physics, University of Oslo).
+
+**Contributors:**
+
+- Fernando Moreno-Insertis (Instituto de Astrofísica de Canarias; Universidad de
+  La Laguna).
+- Claude Opus 5.5 (Anthropic), AI assistant: code review, bug fixes, testing,
+  packaging and documentation.
+- ChatGPT v5.6 (OpenAI), AI assistant: optimization and documentation.
 
 ## Features
 
@@ -202,10 +209,6 @@ Council of Norway through its Centres of Excellence scheme, project number
 262622; and by grant CEX2025-001609-S, awarded to the Instituto de Astrofísica
 de Canarias under the Severo Ochoa Centre of Excellence program and funded by
 MICIU/AEI/10.13039/501100011033.
-
-The development of this package was assisted by ChatGPT v5.6 (OpenAI) and
-Claude Opus 5.5 (Anthropic), which helped with optimization, code review,
-testing and documentation.
 
 ## License
 

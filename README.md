@@ -38,9 +38,14 @@ Centre for Solar Physics, University of Oslo).
 
 ## Installation
 
+Install directly from GitHub:
 ```bash
 pip install git+https://github.com/dnobrega/nullfinder-proto.git
-# or, from a clone
+```
+Or clone the repository for development:
+```bash
+git clone https://github.com/dnobrega/nullfinder-proto.git
+cd nullfinder-proto
 pip install -e .
 ```
 

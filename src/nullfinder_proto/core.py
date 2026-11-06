@@ -18,9 +18,9 @@ Pipeline
 4. Robust multi-start Newton refinement of the trilinear field inside each
    surviving cell, with a residual-decreasing line search.  Starts are a
    fixed 27-point pattern plus the centres of the sub-boxes that survive the
-   exclusion test, so roots close to cell faces are not missed.  Several roots per
-   cell are kept (at most 6 isolated roots are possible for a trilinear
-   system; more than that signals a degenerate, non-isolated zero set).
+   exclusion test, improving recovery of roots near cell faces.  Several
+   distinct roots per cell are retained up to ``max_roots_per_cell``; roots
+   beyond that storage limit are discarded with a warning.
 5. Same-charge duplicate roots (the same null seen from neighbouring cells or
    from different starts) are merged with a local grid-scale tolerance.
 6. Diagnostics: topological charge ``sign(det J)``, an adaptive Poincare index
@@ -1924,9 +1924,12 @@ def find_magnetic_nulls(
         Force the working field dtype.  None keeps the common input dtype
         (float32 stays float32).  Newton always works in float64.
     max_roots_per_cell : int
-        Distinct roots kept per candidate cell.  A trilinear cell has at most
-        6 isolated roots; ``n_cells_root_overflow > 0`` therefore indicates a
-        degenerate zero set.
+        Maximum number of distinct roots retained in one candidate cell
+        (default 8). This is a storage limit, not a physical assumption.
+        If extra distinct roots are detected, they are discarded, a
+        ``RuntimeWarning`` is issued, and ``n_cells_root_overflow`` counts
+        the affected cells. Reaching a user-set cap does not by itself imply
+        a degenerate magnetic null.
     root_duplicate_q_tol : float
         Distance in normalised cell coordinates below which roots found from
         different starts in one cell are the same root.
@@ -1966,13 +1969,18 @@ def find_magnetic_nulls(
             the cell that was kept.
             ``detJ`` (N,), ``null_charge`` (N,) int: sign(det J), 0 only for a
             numerically singular J.
-            ``total_charge`` int: sum of ``null_charge``.  Zero is expected
-            only for closed (e.g. fully periodic, padded) domains.
-            ``poincare`` (N,) int32: adaptive Poincare index of the containing
-            cell, in physical orientation; equals ``null_charge`` for one
-            simple null per cell.  It is the sum of charges if a cell holds
-            several nulls; ``POINCARE_DEGENERATE`` (99) if |B| = 0 exactly at a
-            sampled surface point; ``POINCARE_NOT_COMPUTED`` (-99) if disabled.
+            ``total_charge`` int: sum of ``null_charge``.  For a fully
+            periodic domain with all isolated nulls included, the expected
+            sum is zero.  For an open volume the sum need not vanish; when B
+            does not vanish on the boundary, it equals the boundary degree.
+            ``poincare`` (N,) int32: numerical approximation to the
+            topological degree on the containing cell surface, in physical
+            orientation.  It should agree with ``null_charge`` for a single
+            isolated non-degenerate null, provided the surface integral is
+            adequately resolved and B is nonzero on the cell boundary.  A
+            close opposite-charge pair may have net index zero;
+            ``POINCARE_DEGENERATE`` (99) indicates |B| = 0 at a sampled
+            surface point; ``POINCARE_NOT_COMPUTED`` (-99) if disabled.
 
         Classification (from J, or J - tr(J)I/3 if ``classify_traceless``)
             ``null_type`` (N,) int8: ``NULL_TYPE_*`` (0 unknown, 1 A, 2 B,
@@ -2128,9 +2136,8 @@ def find_magnetic_nulls(
     if n_overflow:
         warnings.warn(
             f"max_roots_per_cell={max_roots_per_cell} was reached in "
-            f"{n_overflow} cell(s); "
-            "a trilinear cell has at most 6 isolated roots, so these cells probably "
-            "contain a degenerate (non-isolated) zero set. Extra roots were discarded.",
+            f"{n_overflow} cell(s). Additional distinct roots were "
+            "discarded. Increase max_roots_per_cell to avoid losing roots.",
             RuntimeWarning,
             stacklevel=2,
         )

@@ -1,4 +1,5 @@
 __pycache__/
+.DS_Store
 *.py[cod]
 *.nbi
 *.nbc
@@ -7,3 +8,5 @@ build/
 dist/
 .pytest_cache/
 .venv/
+.ipynb_checkpoints/
+benchmarks/_bench_modules/

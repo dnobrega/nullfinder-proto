@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased — documentation and benchmark consistency
+
+- Clarify `max_roots_per_cell` overflow warnings: a user-configured storage
+  limit can be reached even for isolated, non-degenerate nulls; extra roots are
+  discarded and counted. Add a regression test for this case.
+- Describe the Newton search as robust rather than mathematically complete;
+  refine notes on Poincaré and boundary charge conservation.
+- Use the README's half-grid matching threshold consistently throughout the
+  Olshevsky notebook, make Federica's optional path explicit, and print
+  benchmark environment details and module import times.
+- Document limitations of the illustrative Bifrost staggered-grid conversion;
+  improve acknowledgments and ignore notebook-generated temporary files.
+
 ## 0.1.0 — first public version
 
 Changes with respect to the original single-file `null_finder.py`. The

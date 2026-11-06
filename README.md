@@ -17,13 +17,16 @@ Centre for Solar Physics, University of Oslo).
   La Laguna).
 - Claude Opus 5.5 (Anthropic), AI assistant: code review, bug fixes, testing,
   packaging and documentation.
-- ChatGPT v5.6 (OpenAI), AI assistant: optimization and documentation.
+- ChatGPT (OpenAI), AI assistant: algorithm development, numerical optimization,
+  code review and documentation.
 
 ## Features
 
-- **Complete search.** Sign-change candidates, an exact exclusion test
-  (Bernstein subdivision) and multi-start Newton seeded from the surviving
-  sub-boxes, so several roots per cell and roots close to cell faces are found.
+- **Robust multi-root search.** Sign-change candidates, a rigorous exclusion
+  test (Bernstein subdivision), and multi-start Newton seeded from surviving
+  sub-boxes. Multiple roots per cell can be found, including roots near cell
+  faces. The exclusion test can certify that a cell has no roots; Newton is
+  not a mathematical guarantee of finding every root in a surviving cell.
 - **Scale invariant.** All tolerances are relative by default: results do not
   depend on the field or length units.
 - **Any grid orientation and memory layout.** Increasing or decreasing axes,
@@ -93,6 +96,11 @@ by_c = 0.5 * (by + np.roll(by, -1, axis=1))
 bz_c = 0.5 * (bz + np.roll(bz, -1, axis=2))  # non-periodic z: handle the last layer
 ```
 
+**This is only an illustrative stencil, not a general Bifrost conversion.**
+Verify the actual stagger locations and boundary conditions for each component.
+In particular, `np.roll` wraps the boundary: do not use it unchanged on a
+non-periodic axis. Prefer the simulation code's staggered-grid operators.
+
 **Indexing.** Arrays have shape `(nx, ny, nz)` and are accessed as
 `arr[i, j, k]`. Coordinates are 1D, finite and strictly monotonic.
 
@@ -117,12 +125,12 @@ res = find_magnetic_nulls(*pad_periodic(bx, by, bz, x, y, z, axes=(0, 1)))
 
 | Key | Meaning |
 |---|---|
-| `poincare` | Degree of B/‖B‖ over the cell surface, refined adaptively. Equals `null_charge` for one simple null per cell; it is the sum of charges if a cell holds a close pair (then usually 0); 99 if B = 0 exactly at a sample point. |
+| `poincare` | Numerical approximation to the topological degree of B/‖B‖ over the cell surface, refined adaptively. For an isolated, non-degenerate null it should agree with `null_charge` if the surface integral is adequately resolved and B does not vanish on the cell boundary. Opposite-charge pairs in a cell can cancel (net degree 0). The sentinel 99 means B = 0 at a sampled surface point. |
 | `nearest_opposite_distance_cells` | Distance to the nearest opposite-charge null in fractional index space (`cell + q`), i.e. in grid cells along each axis, also on stretched or anisotropic grids. |
 | `resolution_name` | `resolved` (≥ 1 cell), `marginal` (0.5–1), `unresolved` (< 0.5), `isolated` (no opposite charge present), `degenerate` (charge 0). Thresholds are parameters. |
 | `div_residual` | ‖tr J‖ / ‖J‖_F. The trilinear interpolant is not pointwise solenoidal even for discretely solenoidal data; values of a few × 1e-2 are normal for turbulence-like fields. `div_warning` uses `div_tol_rel = 0.1`. |
 | `current_spine_angle_deg` | Angle between `curl B` and the spine axis: 0° for a pure spine current (spiral nulls), 90° for a pure fan current. |
-| `total_charge` | Sum of charges. Zero is expected only for closed domains (e.g. fully periodic and padded). |
+| `total_charge` | Sum of detected null charges. For a fully periodic domain with all isolated nulls accounted for, the net charge is expected to be zero. In an open volume, the total charge need not vanish: when B is nonzero on the boundary, it equals the degree of the field-direction map on that boundary. |
 
 ## Limitations
 
@@ -157,12 +165,21 @@ field. Temporary memory during refinement is bounded by `chunk_size`.
 analytic field of Olshevsky et al. (2020), with 14 known nulls, at several
 resolutions, and compares it with other implementations, such as the public
 finder of [Chiti (2020)](https://github.com/FedericaChiti/Null_Finder). That
-code is not distributed here; download it and set its path in the notebook.
+code is not distributed here; download it and set `FEDERICA_PATH` in the
+notebook. **If `FEDERICA_PATH = None`, Federica's method is not run**: the
+notebook then benchmarks only the installed finder (and any optionally supplied
+local implementation). Since Chiti's routine returns positions but not null
+types, the notebook calculates its classification separately, using the
+Jacobian of Chiti's own trilinear interpolation and the same classification
+rules as this package.
 
 Note that Table A.1 of the paper prints Y₂ = 0.0117, but the tabulated nulls
 10 and 12 are only reproduced with Y₂ = 0.117, which the notebook uses.
 
-With a matching tolerance of half a grid spacing:
+With a one-to-one matching tolerance of **half a grid spacing**
+(`MATCH_TOL_CELLS = 0.5` in the notebook), the following values refer to
+**our finder**; classification counts do not come from Chiti's original
+function. Re-run the notebook with the same tolerance to reproduce them:
 
 | N³ | Found | Matched | ⟨d⟩ | d_max | Types correct |
 |---|---|---|---|---|---|

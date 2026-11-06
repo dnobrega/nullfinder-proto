@@ -39,6 +39,22 @@ def test_poincare_sums_charges_of_close_pair():
     assert r["snapshot_resolution"] == "unresolved"
 
 
+def test_root_storage_overflow_is_not_mislabelled_degenerate():
+    # Two isolated, opposite-charge roots inside one cell. A storage cap of 1
+    # must report root loss, but must not call this regular pair degenerate.
+    x = np.linspace(-1, 1, 6) + 0.11
+    B = sample(bilinear_pair(0.0025, 1.0), x, x, x)
+    with pytest.warns(RuntimeWarning, match="Additional distinct roots were discarded"):
+        capped = run(*B, x, x, x, max_roots_per_cell=1)
+    assert len(capped["pos"]) == 1
+    assert capped["n_cells_root_overflow"] == 1
+
+    uncapped = run(*B, x, x, x, max_roots_per_cell=2)
+    assert len(uncapped["pos"]) == 2
+    assert uncapped["n_cells_root_overflow"] == 0
+    assert uncapped["total_charge"] == 0
+
+
 def test_resolution_counts_cells_on_anisotropic_grid():
     xa = np.linspace(-1, 1, 41) + 0.0011  # dx = 0.05
     za = np.linspace(-0.2, 0.2, 65) + 0.0007  # dz = dx / 8

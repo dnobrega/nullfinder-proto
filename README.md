@@ -212,4 +212,4 @@ MICIU/AEI/10.13039/501100011033.
 
 ## License
 
-To be added.
+BSD 3-Clause License; see [`LICENSE`](LICENSE).

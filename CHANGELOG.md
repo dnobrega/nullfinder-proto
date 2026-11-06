@@ -56,6 +56,7 @@ package is distributed as `nullfinder-proto` and imported as `nullfinder_proto`.
 - Benchmark notebook on the Olshevsky et al. (2020) analytic field
   (`benchmarks/`), with optional comparison to other implementations.
 - Authors, `CITATION.cff`, how to cite and acknowledgements.
+- BSD 3-Clause license.
 
 ### Changed (API)
 - Parameters after `x, y, z` are keyword-only.

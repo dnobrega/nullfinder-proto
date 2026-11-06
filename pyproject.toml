@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=64"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,10 +7,9 @@ name = "nullfinder-proto"
 version = "0.1.0"
 description = "A parallel Python toolkit to find and classify magnetic null points in MHD simulations on Cartesian (uniform or stretched) grids."
 readme = "README.md"
-authors = [
-    { name = "Daniel Nóbrega-Siverio", email = "dnobregasiverio@cea.fr" },
-    { name = "Fernando Moreno-Insertis" },
-]
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+authors = [{ name = "Daniel Nóbrega Siverio", email = "dnobregasiverio@cea.fr" }]
 requires-python = ">=3.10"
 dependencies = [
     "numpy>=1.23",

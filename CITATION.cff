@@ -1,20 +1,19 @@
 cff-version: 1.2.0
-message: "If you use this software, please cite it as below."
-title: "nullfinder-proto: a parallel Python toolkit to find and classify magnetic null points in MHD simulations on Cartesian grids"
+message: "If nullfinder-proto is used in published scientific work, please cite this software using these metadata and the GitHub release."
+title: "nullfinder-proto: A parallel Python toolkit to find and classify magnetic null points in MHD simulations"
 type: software
-version: 0.1.0
 authors:
-  - family-names: "Nóbrega-Siverio"
+  - family-names: "Nóbrega Siverio"
     given-names: "Daniel"
-    email: "dnobregasiverio@cea.fr"
-    affiliation: "Université Paris-Saclay, Université Paris Cité, CEA, CNRS, AIM"
-  - family-names: "Moreno-Insertis"
-    given-names: "Fernando"
-    affiliation: "Instituto de Astrofísica de Canarias"
+version: "0.1.0"
 repository-code: "https://github.com/dnobrega/nullfinder-proto"
 url: "https://github.com/dnobrega/nullfinder-proto"
+date-released: 2026-11-06
+license: "BSD-3-Clause"
 keywords:
-  - MHD
-  - magnetic null points
-  - magnetic reconnection
-  - solar physics
+  - "magnetic null points"
+  - "magnetic reconnection"
+  - "magnetohydrodynamics"
+  - "solar physics"
+  - "scientific Python"
+abstract: "A parallel Python toolkit to find and classify magnetic null points in MHD simulations on Cartesian (uniform or stretched) grids."

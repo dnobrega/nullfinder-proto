@@ -49,6 +49,9 @@ Changes with respect to the original single-file `null_finder.py`.
   `n_candidates_excluded`, `n_candidates_refined`, `null_type_name`.
 - Test suite, README, packaging, CI (tests on Linux/macOS, ruff lint and format check).
 - Ruff configuration in `pyproject.toml`; code formatted with `ruff format`.
+- Benchmark notebook on the Olshevsky et al. (2020) analytic field
+  (`benchmarks/`), with optional comparison to other implementations.
+- Authors, `CITATION.cff`, how to cite and acknowledgements.
 
 ### Changed (API)
 - Parameters after `x, y, z` are keyword-only.

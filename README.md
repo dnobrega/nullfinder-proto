@@ -9,6 +9,10 @@ Newton method, and everything reported about them (Jacobian, eigenvalues,
 null type, spine and fan, currents) comes from the same local representation,
 so the results are mutually consistent.
 
+**Authors:** Daniel Nóbrega-Siverio (Université Paris-Saclay, CEA, AIM; Rosseland
+Centre for Solar Physics, University of Oslo) and Fernando Moreno-Insertis
+(Instituto de Astrofísica de Canarias; Universidad de La Laguna).
+
 ## Features
 
 - **Complete search.** Sign-change candidates, an exact exclusion test
@@ -133,6 +137,25 @@ sign-change candidates:
 The previous version (single file, no exclusion test) took 1.29 s on the same
 field. Temporary memory during refinement is bounded by `chunk_size`.
 
+## Benchmark
+
+`benchmarks/olshevsky2020_null_benchmark.ipynb` applies the finder to the
+analytic field of Olshevsky et al. (2020), with 14 known nulls, at several
+resolutions, and compares it with other implementations, such as the public
+finder of [Chiti (2020)](https://github.com/FedericaChiti/Null_Finder). That
+code is not distributed here; download it and set its path in the notebook.
+
+Note that Table A.1 of the paper prints Y₂ = 0.0117, but the tabulated nulls
+10 and 12 are only reproduced with Y₂ = 0.117, which the notebook uses.
+
+With a matching tolerance of half a grid spacing:
+
+| N³ | Found | Matched | ⟨d⟩ | d_max | Types correct |
+|---|---|---|---|---|---|
+| 20³ | 12 | 11 | 3.07×10⁻² | 1.21×10⁻¹ | 8 |
+| 80³ | 14 | 14 | 4.35×10⁻³ | 1.18×10⁻² | 14 |
+| 512³ | 14 | 14 | 1.06×10⁻⁴ | 3.29×10⁻⁴ | 14 |
+
 ## Development
 
 ```bash
@@ -155,8 +178,32 @@ of the result schema.
 - Lau, Y.-T. & Finn, J. M. 1990, ApJ, 350, 672 — A/B null types.
 - Parnell, C. E., Smith, J. M., Neukirch, T. & Priest, E. R. 1996, Phys.
   Plasmas, 3, 759 — classification of linear nulls.
-- Haynes, M. & Parnell, C. E. 2007, Phys. Plasmas, 14, 082107 — trilinear null
-  finding.
+- Haynes, A. L. & Parnell, C. E. 2007, Phys. Plasmas, 14, 082107 — trilinear
+  null finding.
+- Olshevsky, V., Pontin, D. I., Williams, B., et al. 2020, A&A, 644, A150 —
+  comparison of null-finding methods and analytic benchmark field.
+- Van Oosterom, A. & Strackee, J. 1983, IEEE Trans. Biomed. Eng., 30, 125 —
+  solid angle of a triangle (Poincaré index).
+
+## How to cite
+
+If you use this code, please cite the accompanying paper (Nóbrega-Siverio &
+Moreno-Insertis, in preparation) and the software itself; see
+[`CITATION.cff`](CITATION.cff), or the "Cite this repository" button on GitHub.
+
+## Acknowledgements
+
+This research has been supported by the European Research Council through the
+Synergy Grant number 810218 ("The Whole Sun", ERC-2018-SyG); by the Centre
+National d'Etudes Spatiales (CNES) Solar Orbiter project; by the Research
+Council of Norway through its Centres of Excellence scheme, project number
+262622; and by grant CEX2025-001609-S, awarded to the Instituto de Astrofísica
+de Canarias under the Severo Ochoa Centre of Excellence program and funded by
+MICIU/AEI/10.13039/501100011033.
+
+The development of this package was assisted by ChatGPT v5.6 (OpenAI) and
+Claude Opus 5.5 (Anthropic), which helped with optimization, code review,
+testing and documentation.
 
 ## License
 

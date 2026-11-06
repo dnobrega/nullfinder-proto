@@ -241,12 +241,19 @@ def main(argv=None):
     check_memory(a.n, a.dtype, a.chiti is not None, a.force)
     rows, chiti_row, info = scaling(a.n, a.dtype, threads, a.repeat, a.chiti)
 
-    print(f"\n{'threads':>7} {'time [s]':>9} {'speedup':>8} {'efficiency':>10}")
+    b = rows[0]["threads"]
+    sp = f"speedup (T{b}/Tn)"
+    ef = "efficiency (speedup/n)" if b == 1 else f"efficiency (speedup*{b}/n)"
+    print(f"\n{'threads':>7}  {'time [s]':>9}  {sp:>16}  {ef:>24}")
     for r in rows:
         print(
-            f"{r['threads']:7d} {r['total_s']:9.3f} "
-            f"{r['speedup']:8.2f} {r['efficiency']:10.0%}"
+            f"{r['threads']:7d}  {r['total_s']:9.3f}  "
+            f"{r['speedup']:16.2f}  {r['efficiency']:24.0%}"
         )
+    print(
+        f"speedup: time with {b} thread(s) / time with n threads. "
+        "efficiency: fraction of the ideal speedup (100 % = ideal)."
+    )
     if chiti_row:
         fastest = min(r["total_s"] for r in rows)
         print(

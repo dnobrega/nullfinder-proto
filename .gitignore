@@ -10,3 +10,4 @@ dist/
 .venv/
 .ipynb_checkpoints/
 benchmarks/_bench_modules/
+benchmarks/results/

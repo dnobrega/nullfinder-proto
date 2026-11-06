@@ -145,26 +145,38 @@ res = find_magnetic_nulls(*pad_periodic(bx, by, bz, x, y, z, axes=(0, 1)))
 
 ## Performance
 
-Historical timing of the two-pass candidate scan, before the single-pass
-bit-mask optimization, on a random solenoidal field (128³ float32, 2 threads,
-8403 nulls among 70 854 sign-change candidates):
+**Strong scaling (1024³).** Timings of the Olshevsky et al. (2020) analytic
+field with 14 known nulls, comparing the previous two-pass candidate scan
+with the current single-pass bit-mask scan. Both use `float32`, Numba/OpenMP
+on macOS ARM64 (18 logical CPUs reported), and the same grid and field.
+Values are **median search times**, after a full-grid warm-up, excluding
+field generation and JIT compilation; the older version used 5 timed runs,
+the current version 3. Both versions found and correctly classified all 14
+nulls, with the same maximum positional error (1.08×10⁻⁴).
 
-| Stage | Time |
-|---|---|
-| candidate scan | 0.045 s (previous two-pass scan) |
-| exclusion test (depth 3, removes 77 % of candidates) | 0.03 s |
-| Newton refinement | 0.27 s |
-| Poincaré, classification, resolution | 0.18 s |
-| **total** | **0.53 s** |
+| Numba threads | Previous (s) | Current (s) | Faster by | Current parallel efficiency |
+|---:|---:|---:|---:|---:|
+| 1 | 8.327 | 0.834 | **10.0×** | 100.0% |
+| 2 | 4.248 | 0.438 | **9.7×** | 95.2% |
+| 4 | 2.328 | 0.224 | **10.4×** | 93.0% |
+| 8 | 1.316 | 0.133 | **9.9×** | 78.6% |
+| 16 | — | 0.074 | — | 70.6% |
 
-The previous version (single file, no exclusion test) took 1.29 s on the same
-field. **These are historical measurements, not timings of the current code.**
-The current scan uses a single pass with a bit mask (approximately one bit per
-cell), reusing 2×2 vertex-block extrema along the contiguous memory axis.
-Its benefit depends on the field, memory layout and thread count. Run
-`benchmarks/thread_scaling.py` on your machine for current timings. Temporary
-memory during refinement is bounded by `chunk_size`; the candidate mask adds
-about 134 MB for a 1024³ grid.
+At one thread, the candidate scan itself falls from **8.325 s to 0.833 s**
+(about 10×); the exclusion and Newton stages change little. With 16 threads,
+the current implementation takes **0.074 s**, an **11.3× strong-scaling
+speedup** over its own one-thread time (70.6% parallel efficiency). The
+previous version was not measured with 16 threads. These results describe the
+null search on a field already in memory, not the time to generate the field.
+
+The current scan performs a single pass using a compact bit mask
+(approximately one bit per cell), reusing 2×2 vertex-block extrema along the
+contiguous memory axis. The benefit depends on the field, memory layout and
+thread count; in particular, this 14-null analytic field is not representative
+of a turbulent simulation with many candidates. Run
+`benchmarks/thread_scaling.py` to measure your own workload. Temporary memory
+during refinement is bounded by `chunk_size`; the candidate mask adds about
+134 MB for a 1024³ grid.
 
 ## Benchmark
 

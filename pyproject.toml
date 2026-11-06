@@ -9,7 +9,7 @@ description = "A parallel Python toolkit to find and classify magnetic null poin
 readme = "README.md"
 license = "BSD-3-Clause"
 license-files = ["LICENSE"]
-authors = [{ name = "Daniel Nóbrega Siverio", email = "dnobregasiverio@cea.fr" }]
+authors = [{ name = "Daniel Nóbrega-Siverio", email = "dnobregasiverio@cea.fr" }]
 requires-python = ">=3.10"
 dependencies = [
     "numpy>=1.23",

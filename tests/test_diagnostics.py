@@ -1,5 +1,7 @@
 """Poincare, resolution, periodicity, schema and input validation."""
 
+import re
+
 import numpy as np
 import pytest
 from conftest import offset_grid, pair_field, random_solenoidal, run, sample
@@ -148,7 +150,11 @@ def test_topology_report_runs(capsys):
     )
     assert rep["charge_ok"]
     assert rep["poincare_agreement"] == 1.0
-    assert "pair resolution" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "pair resolution" in output
+    assert "Poincare agreement: 100.0%" in output
+    assert "nearest-opposite links:" in output
+    assert f"{r['min_opposite_distance_cells']:.5f} grid cells" in output
     with pytest.raises(ValueError, match="use must be"):
         nf.topology_report(r, use="foo", verbose=False)
 
@@ -190,3 +196,15 @@ def test_classify_false_keeps_divergence():
     r = run(*sample(pair_field, x, y, z), x, y, z, classify=False)
     assert np.all(r["null_type"] == nf.NULL_TYPE_UNKNOWN)
     assert np.all(np.isfinite(r["div_residual"]))
+
+
+def test_verbose_timing_uses_indented_five_decimal_seconds(capsys):
+    x, y, z = offset_grid(12)
+    bx, by, bz = sample(pair_field, x, y, z)
+    res = nf.find_magnetic_nulls(bx, by, bz, x, y, z, verbose=True)
+    output = capsys.readouterr().out
+    assert "[null finder] timing [s]:" in output
+    assert f"min d_opp = {res['min_opposite_distance_cells']:.5f} cells" in output
+    for key in res["timing"]:
+        name = key.removesuffix("_s")
+        assert re.search(rf"^    {name}\s+\d+\.\d{{5}}$", output, re.MULTILINE)

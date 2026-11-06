@@ -1,34 +1,22 @@
 # Changelog
 
-## Unreleased — documentation, benchmark and candidate-scan improvements
-
-- Replace the two-pass sign-change candidate scan with a single parallel pass
-  and a compact bit mask (approximately one bit per cell). Support both C and
-  Fortran layouts; skip cells with non-finite field values at their vertices.
-- Add candidate-scan regression tests, including NaN/Inf and mixed layouts.
-- Add `--threading-layer` and `--chunksize` to `thread_scaling.py`. Warn when
-  requesting positive chunks with a non-TBB backend (dynamic scheduling is
-  TBB-only). Preserve full-grid warm-ups, median timings and output in the
-  git-ignored `benchmarks/results/` directory.
-- Label historical performance figures as such; format benchmark code.
-
-- Clarify `max_roots_per_cell` overflow warnings: a user-configured storage
-  limit can be reached even for isolated, non-degenerate nulls; extra roots are
-  discarded and counted. Add a regression test for this case.
-- Describe the Newton search as robust rather than mathematically complete;
-  refine notes on Poincaré and boundary charge conservation.
-- Use the README's half-grid matching threshold consistently throughout the
-  Olshevsky notebook, make Federica's optional path explicit, and print
-  benchmark environment details and module import times.
-- Document limitations of the illustrative Bifrost staggered-grid conversion;
-  improve acknowledgments and ignore notebook-generated temporary files.
-
 ## 0.1.0 — first public version
 
 Changes with respect to the original single-file `null_finder.py`. The
 package is distributed as `nullfinder-proto` and imported as `nullfinder_proto`.
 
+### Performance
+- Replace the two-pass sign-change candidate scan with a single parallel pass
+  using a compact bit mask (approximately one bit per cell). Support C and
+  Fortran memory layouts; skip cells with non-finite field values at vertices.
+- Extend `thread_scaling.py` with `--threading-layer` and `--chunksize`,
+  warning when dynamic scheduling is requested without TBB. Retain full-grid
+  warm-ups, median timings and output in git-ignored `benchmarks/results/`.
+
 ### Fixed
+- Clarify `max_roots_per_cell` overflow warnings: a user-configured storage
+  limit can be reached for isolated, non-degenerate nulls, so overflow does
+  not by itself imply degeneracy. Count discarded roots and test this case.
 - **Poincaré sign with decreasing axes.** The index was computed in index-space
   orientation and came out as `-sign(det J)` for an odd number of decreasing
   coordinate axes. It is now in physical orientation.
@@ -74,6 +62,8 @@ package is distributed as `nullfinder-proto` and imported as `nullfinder_proto`.
 - `current_spine_angle_deg`, `nearest_opposite_distance_cells`,
   `opposite_pair_index`, `opposite_pair_distance_cells`, `n_degenerate`,
   `n_candidates_excluded`, `n_candidates_refined`, `null_type_name`.
+- Candidate-scan regression tests, including NaN/Inf and C/Fortran/strided
+  layouts.
 - Test suite, README, packaging, CI (tests on Linux/macOS, ruff lint and format check).
 - Ruff configuration in `pyproject.toml`; code formatted with `ruff format`.
 - Benchmark notebook on the Olshevsky et al. (2020) analytic field
@@ -93,3 +83,13 @@ package is distributed as `nullfinder-proto` and imported as `nullfinder_proto`.
 - `resolution_name` is a fixed-width string array (no pickling needed).
 - `refine_candidates_serial` / `refine_candidates_parallel` were merged into
   one kernel; serial mode runs it with one thread.
+
+### Documentation and reproducibility
+- Describe Newton root finding as robust rather than mathematically complete;
+  clarify the conditions for Poincaré-index agreement and charge conservation.
+- Use the same half-grid matching threshold in the README and Olshevsky
+  notebook; document the optional Chiti finder and benchmark environment.
+- Document assumptions of the illustrative Bifrost staggered-grid conversion,
+  update acknowledgments and ignore generated notebook files.
+- Document the single-pass candidate-scan benchmark and strong-scaling
+  measurements in the README.

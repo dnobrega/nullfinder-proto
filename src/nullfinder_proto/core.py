@@ -1776,38 +1776,45 @@ def topology_report(
         out.update({key: res[key] for key in res_keys})
 
     if verbose:
-        print("N nulls:", n)
-        print(
-            "sign(detJ) counts:", out["sign_detJ_counts"], " sum:", out["sum_sign_detJ"]
-        )
-        print("null types:", out["null_type_counts"])
+        print(f"N nulls: {n}")
+        print("topology:")
+        print(f"  sign(detJ) counts: {out['sign_detJ_counts']}")
+        print(f"  total charge:      {out['sum_sign_detJ']}")
+        print(f"  null types:        {out['null_type_counts']}")
         if poincare_computed:
-            print(
-                "Poincare counts:",
-                out["poincare_counts"],
-                " sum (regular):",
-                out["sum_poincare_regular"],
-            )
+            print(f"  Poincare counts:   {out['poincare_counts']}")
+            print(f"  Poincare sum:      {out['sum_poincare_regular']} (regular)")
+            n_nonzero = int(np.count_nonzero((p == 1) | (p == -1)))
+            if n_nonzero:
+                print(
+                    "  Poincare agreement: "
+                    f"{out['poincare_agreement']:.1%} "
+                    f"({n_nonzero} nonzero indices)"
+                )
+            else:
+                print("  Poincare agreement: n/a (no nonzero indices)")
         else:
-            print("Poincare: not computed")
+            print("  Poincare: not computed")
         if expected_charge is not None:
-            print("expected charge:", expected_charge, " charge OK:", out["charge_ok"])
+            print(f"  expected charge:  {expected_charge} (OK: {out['charge_ok']})")
         if show_resolution and has_res:
+            print("pair resolution:")
+            print(f"  status:             {res['snapshot_resolution']}")
             print(
-                "pair resolution:",
-                res["snapshot_resolution"],
-                f"(min d_opp = {res['min_opposite_distance_cells']:.3g} cells)",
+                "  min opposite d:     "
+                f"{res['min_opposite_distance_cells']:.5f} grid cells"
             )
             print(
-                f"pair counts: resolved={res['n_pair_resolved']}, "
+                f"  nearest-opposite links: {res['n_opposite_pairs']} unique "
+                f"(resolved={res['n_pair_resolved']}, "
                 f"marginal={res['n_pair_marginal']}, "
-                f"unresolved={res['n_pair_unresolved']}, "
-                f"total={res['n_opposite_pairs']}"
+                f"unresolved={res['n_pair_unresolved']})"
             )
             print(
-                f"per-null counts: resolved={res['n_resolved']}, "
+                f"  per-null counts: resolved={res['n_resolved']}, "
                 f"marginal={res['n_marginal']}, "
-                f"unresolved={res['n_unresolved']}, isolated={res['n_isolated']}, "
+                f"unresolved={res['n_unresolved']}, "
+                f"isolated={res['n_isolated']}, "
                 f"degenerate={res['n_degenerate']}"
             )
         if show_null_table and n > 0 and has_res:
@@ -2374,14 +2381,13 @@ def find_magnetic_nulls(
             f"[null finder] unique nulls: {len(pos)}  "
             f"(total charge {result['total_charge']})"
         )
-        print(
-            "[null finder] timing: "
-            + ", ".join(f"{k[:-2]}={v:.3f}s" for k, v in tm.items())
-        )
+        print("[null finder] timing [s]:")
+        for key, value in tm.items():
+            print(f"    {key.removesuffix('_s'):<11} {value:.5f}")
         if add_resolution_diagnostics:
             print(
                 f"[null finder] pair resolution: {result['snapshot_resolution']} "
-                f"(min d_opp = {result['min_opposite_distance_cells']:.3g} cells, "
+                f"(min d_opp = {result['min_opposite_distance_cells']:.5f} cells, "
                 f"pairs resolved/marginal/unresolved = {result['n_pair_resolved']}/"
                 f"{result['n_pair_marginal']}/{result['n_pair_unresolved']})"
             )

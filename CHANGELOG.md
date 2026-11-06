@@ -57,6 +57,8 @@ package is distributed as `nullfinder-proto` and imported as `nullfinder_proto`.
   (`benchmarks/`), with optional comparison to other implementations.
 - Authors, `CITATION.cff`, how to cite and acknowledgements.
 - BSD 3-Clause license.
+- `benchmarks/thread_scaling.py`: thread-scaling benchmark on a large
+  Olshevsky et al. (2020) field, with a Numba-parallel field builder.
 
 ### Changed (API)
 - Parameters after `x, y, z` are keyword-only.

@@ -170,6 +170,20 @@ With a matching tolerance of half a grid spacing:
 | 80³ | 14 | 14 | 4.35×10⁻³ | 1.18×10⁻² | 14 |
 | 512³ | 14 | 14 | 1.06×10⁻⁴ | 3.29×10⁻⁴ | 14 |
 
+`benchmarks/thread_scaling.py` measures how the run time scales with the number
+of Numba threads on the same field at large resolution (1024³ by default, about
+13 GB in float32), checks that the 14 nulls are recovered, and can time Chiti's
+finder on the same data:
+
+```bash
+python benchmarks/thread_scaling.py --n 1024 --threads 1,2,4,8,16
+python benchmarks/thread_scaling.py --n 512 --dtype float64 --chiti path/to/null_finder.py
+```
+
+It writes a CSV table and a figure with run times per stage, speedup and
+parallel efficiency. At large N the run time is dominated by the candidate scan,
+which is parallel over z planes.
+
 ## Development
 
 ```bash

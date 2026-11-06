@@ -174,9 +174,7 @@ def scaling(n, dtype, threads, repeat, chiti_path=None):
         r["ideal_speedup"] = r["threads"] / base["threads"]
         r["parallel_efficiency"] = r["speedup"] / r["ideal_speedup"]
         r["speedup_scan"] = (
-            base["candidate_s"] / r["candidate_s"]
-            if r["candidate_s"] > 0
-            else np.nan
+            base["candidate_s"] / r["candidate_s"] if r["candidate_s"] > 0 else np.nan
         )
 
     chiti_row = None
@@ -284,7 +282,9 @@ def main(argv=None):
     p.add_argument("--dtype", default="float32", choices=["float32", "float64"])
     p.add_argument("--threads", default="auto", help='e.g. "1,2,4,8" (default: auto)')
     p.add_argument(
-        "--repeat", type=int, default=3,
+        "--repeat",
+        type=int,
+        default=3,
         help="timed repetitions per thread count (plus one untimed warm-up)",
     )
     p.add_argument("--chiti", type=Path, help="path to Chiti's null_finder.py")

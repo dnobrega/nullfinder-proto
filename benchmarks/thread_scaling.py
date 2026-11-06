@@ -22,6 +22,11 @@ Chiti, prefer --dtype float64: with float32 input it can miss nulls.
 The maximum number of threads is set by Numba (environment variable
 NUMBA_NUM_THREADS, by default the number of cores).
 
+``--threading-layer`` selects ``omp``, ``tbb``, or ``workqueue`` before Numba's
+parallel runtime starts. ``--chunksize`` configures parallel chunk size; Numba
+supports dynamic scheduling only on the TBB threading layer. Other backends
+produce a warning when a positive chunk size is requested.
+
 Outputs ``thread_scaling_N<N>.csv`` and ``thread_scaling_N<N>.png`` in
 ``benchmarks/results/`` by default (git-ignored). Set ``--out`` to override.
 """
@@ -33,6 +38,7 @@ import os
 import platform
 import sys
 import time
+import warnings
 from pathlib import Path
 
 import numba
@@ -125,6 +131,22 @@ def scaling(n, dtype, threads, repeat, chiti_path=None):
     bx, by, bz = olshevsky2020_field(c, c, c, dtype=dtype)
     t_field = time.perf_counter() - t0
     print(f"Field {n}^3 ({np.dtype(dtype).name}) built in {t_field:.1f} s, h = {h:.5f}")
+    active_layer = numba.threading_layer()
+    active_chunksize = numba.get_parallel_chunksize()
+    print(
+        f"Numba threading layer: {active_layer}; "
+        f"parallel chunk size: {active_chunksize} "
+        "(0 = static scheduling)"
+    )
+    if active_chunksize > 0 and active_layer != "tbb":
+        warnings.warn(
+            f"--chunksize={active_chunksize} requested with Numba's "
+            f"'{active_layer}' threading layer; dynamic scheduling "
+            "is supported only with TBB. No dynamic scheduling improvement "
+            "should be assumed.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
 
     rows = []
     max_threads = numba.config.NUMBA_NUM_THREADS
@@ -218,7 +240,8 @@ def scaling(n, dtype, threads, repeat, chiti_path=None):
         "stage_timing": "one run closest to median wall time",
         "cpu_count": os.cpu_count(),
         "numba_max_threads": max_threads,
-        "threading_layer": numba.threading_layer(),
+        "threading_layer": active_layer,
+        "parallel_chunksize": active_chunksize,
         "machine": f"{platform.system()} {platform.machine()} {platform.processor()}",
     }
     return rows, chiti_row, info
@@ -296,15 +319,50 @@ def main(argv=None):
     )
     p.add_argument("--no-plot", action="store_true", help="skip the PNG figure")
     p.add_argument("--force", action="store_true", help="skip the memory check")
+    p.add_argument(
+        "--threading-layer",
+        choices=["default", "omp", "tbb", "workqueue"],
+        default="default",
+        help="Numba threading layer (TBB requires a compatible TBB installation)",
+    )
+    p.add_argument(
+        "--chunksize",
+        type=int,
+        default=0,
+        help="parallel chunk size (0: static scheduling; dynamic scheduling needs TBB)",
+    )
     a = p.parse_args(argv)
     if a.repeat < 1:
         p.error("--repeat must be >= 1")
     if a.n < 2:
         p.error("--n must be >= 2")
+    if a.chunksize < 0:
+        p.error("--chunksize must be >= 0")
+
+    # Numba's threading layer cannot be changed once its parallel runtime
+    # has launched. This also prevents misleading results in an interactive
+    # Python session that has already run other parallel Numba kernels.
+    if a.threading_layer != "default":
+        try:
+            active_layer = numba.threading_layer()
+        except ValueError:  # parallel runtime has not been initialized
+            numba.config.THREADING_LAYER = a.threading_layer
+        else:
+            if active_layer != a.threading_layer:
+                p.error(
+                    f"Numba already initialized with '{active_layer}'; "
+                    f"cannot switch to '{a.threading_layer}' in this process. "
+                    "Run this benchmark in a fresh Python process."
+                )
 
     threads = parse_threads(a.threads, numba.config.NUMBA_NUM_THREADS)
     check_memory(a.n, a.dtype, a.chiti is not None, a.force)
-    rows, chiti_row, info = scaling(a.n, a.dtype, threads, a.repeat, a.chiti)
+    previous_chunksize = numba.get_parallel_chunksize()
+    try:
+        numba.set_parallel_chunksize(a.chunksize)
+        rows, chiti_row, info = scaling(a.n, a.dtype, threads, a.repeat, a.chiti)
+    finally:
+        numba.set_parallel_chunksize(previous_chunksize)
 
     b = rows[0]["threads"]
     sp = f"speedup (T{b}/Tn)"

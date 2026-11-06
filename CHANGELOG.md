@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased — documentation and benchmark consistency
+## Unreleased — documentation, benchmark and candidate-scan improvements
+
+- Replace the two-pass sign-change candidate scan with a single parallel pass
+  and a compact bit mask (approximately one bit per cell). Support both C and
+  Fortran layouts; skip cells with non-finite field values at their vertices.
+- Add candidate-scan regression tests, including NaN/Inf and mixed layouts.
+- Add `--threading-layer` and `--chunksize` to `thread_scaling.py`. Warn when
+  requesting positive chunks with a non-TBB backend (dynamic scheduling is
+  TBB-only). Preserve full-grid warm-ups, median timings and output in the
+  git-ignored `benchmarks/results/` directory.
+- Label historical performance figures as such; format benchmark code.
 
 - Clarify `max_roots_per_cell` overflow warnings: a user-configured storage
   limit can be reached even for isolated, non-degenerate nulls; extra roots are

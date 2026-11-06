@@ -1,9 +1,11 @@
 """Smoke tests of the benchmark scripts on small grids (not run in full in CI)."""
 
 import sys
+import warnings
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "benchmarks"))
 
@@ -30,6 +32,36 @@ def test_thread_scaling_script_runs(tmp_path):
     assert rows[0]["matched"] == 14
     assert rows[0]["speedup"] == 1.0
     assert (tmp_path / "thread_scaling_N40.csv").exists()
+    assert thread_scaling.numba.get_parallel_chunksize() == 0
+
+
+def test_thread_scaling_rejects_negative_chunksize():
+    with pytest.raises(SystemExit, match="2"):
+        thread_scaling.main(["--n", "20", "--chunksize", "-1"])
+
+
+def test_thread_scaling_reports_chunk_size(tmp_path):
+    args = [
+        "--n",
+        "40",
+        "--threads",
+        "1",
+        "--repeat",
+        "1",
+        "--no-plot",
+        "--chunksize",
+        "2",
+        "--out",
+        str(tmp_path),
+    ]
+    with warnings.catch_warnings(record=True) as recorded:
+        warnings.simplefilter("always")
+        rows, _, info = thread_scaling.main(args)
+    if info["threading_layer"] != "tbb":
+        assert any("dynamic scheduling" in str(w.message) for w in recorded)
+    assert rows[0]["matched"] == 14
+    assert info["parallel_chunksize"] == 2
+    assert thread_scaling.numba.get_parallel_chunksize() == 0
 
 
 def _reference_field(x, y, z):

@@ -145,19 +145,26 @@ res = find_magnetic_nulls(*pad_periodic(bx, by, bz, x, y, z, axes=(0, 1)))
 
 ## Performance
 
-Random solenoidal field, 128³ float32, 2 threads, 8403 nulls among 70 854
-sign-change candidates:
+Historical timing of the two-pass candidate scan, before the single-pass
+bit-mask optimization, on a random solenoidal field (128³ float32, 2 threads,
+8403 nulls among 70 854 sign-change candidates):
 
 | Stage | Time |
 |---|---|
-| candidate scan | 0.045 s |
+| candidate scan | 0.045 s (previous two-pass scan) |
 | exclusion test (depth 3, removes 77 % of candidates) | 0.03 s |
 | Newton refinement | 0.27 s |
 | Poincaré, classification, resolution | 0.18 s |
 | **total** | **0.53 s** |
 
 The previous version (single file, no exclusion test) took 1.29 s on the same
-field. Temporary memory during refinement is bounded by `chunk_size`.
+field. **These are historical measurements, not timings of the current code.**
+The current scan uses a single pass with a bit mask (approximately one bit per
+cell), reusing 2×2 vertex-block extrema along the contiguous memory axis.
+Its benefit depends on the field, memory layout and thread count. Run
+`benchmarks/thread_scaling.py` on your machine for current timings. Temporary
+memory during refinement is bounded by `chunk_size`; the candidate mask adds
+about 134 MB for a 1024³ grid.
 
 ## Benchmark
 
@@ -197,9 +204,27 @@ python benchmarks/thread_scaling.py --n 1024 --threads 1,2,4,8,16
 python benchmarks/thread_scaling.py --n 512 --dtype float64 --chiti path/to/null_finder.py
 ```
 
-It writes a CSV table and a figure with run times per stage, speedup and
-parallel efficiency. At large N the run time is dominated by the candidate scan,
-which is parallel over z planes.
+It writes a CSV table and a figure with run times per stage, measured and
+ideal speedup, and parallel efficiency into the git-ignored
+`benchmarks/results/` directory by default. The candidate scan is parallel
+over z planes for Fortran-ordered fields and over x planes for C-ordered fields;
+its relative cost depends on the number of candidate cells and memory layout.
+
+`--threading-layer {default,omp,tbb,workqueue}` selects Numba's parallel backend
+before its parallel runtime starts. `--chunksize N` requests a positive chunk
+size; **Numba's dynamic scheduling requires the TBB threading layer**. The
+script warns when a positive chunk size is requested with another backend.
+Changing the active backend requires a fresh Python process. For example:
+
+```bash
+python benchmarks/thread_scaling.py --n 512 --threads 1,2,4,8 \
+  --threading-layer tbb --chunksize 4
+```
+
+If the OpenMP runtime prints `omp_set_nested routine deprecated`, that warning
+originates in OpenMP, not in the null-finding algorithm. For the Intel OpenMP
+runtime, `KMP_WARNINGS=false` may suppress informational messages; alternatively
+use a supported Numba backend such as TBB if it is installed.
 
 ## Development
 

@@ -9,7 +9,8 @@ Pipeline
 2. Sign-change candidate cells: all three components change sign (or vanish)
    over the 8 cell vertices.  This is a necessary condition for a root of the
    trilinear interpolant, because a multilinear function attains its extremes
-   at the cell vertices.
+   at the cell vertices.  The scan is a single, vectorised pass over the grid
+   that records candidates in a bit mask (1 bit per cell).
 3. Exact exclusion by Bernstein subdivision: the 8 vertex values of a
    trilinear cell are its Bernstein coefficients, so the field over any
    sub-box lies in the convex hull of the sub-box vertex values.  Candidate
@@ -430,88 +431,170 @@ def _cell_is_finite(bx, by, bz, i, j, k):
 # ============================================================
 
 
-@njit(cache=NUMBA_CACHE, fastmath=FASTMATH)
-def _component_crosses_zero(arr, i, j, k):
-    """True if one component changes sign (or vanishes) over the 8 vertices."""
-    vmin = arr[i, j, k]
-    vmax = vmin
-    for dz in range(2):
-        for dy in range(2):
-            for dx in range(2):
-                v = arr[i + dx, j + dy, k + dz]
-                vmin = min(vmin, v)
-                vmax = max(vmax, v)
-    return vmin <= 0.0 <= vmax
+# The scan is a single pass over the grid that sets one bit per candidate cell
+# in a mask (1 bit per cell, e.g. 134 MB for 1024^3), followed by a cheap pass
+# over the mask that lists the candidates.  Along the contiguous axis, the
+# min/max of each component over the 2x2 block of nodes in the other two
+# directions is computed once per node and shared by the two cells that use it;
+# these contiguous row loops allow the compiler to optimise memory access.
+# by and bz are only read for rows in which some cell passes the bx test.
+# Cells touching non-finite vertices are not included in the candidate list.
+
+_POPCOUNT8 = np.array([bin(v).count("1") for v in range(256)], dtype=np.int64)
 
 
-@njit(cache=NUMBA_CACHE, fastmath=FASTMATH)
-def _all_components_cross_zero(bx, by, bz, i, j, k):
-    """Necessary condition for a trilinear root, short-circuited per component."""
-    if not _component_crosses_zero(bx, i, j, k):
-        return False
-    if not _component_crosses_zero(by, i, j, k):
-        return False
-    return _component_crosses_zero(bz, i, j, k)
+@njit(cache=NUMBA_CACHE, fastmath=FASTMATH, inline="always")
+def _min4(a, b, c, d):
+    return min(min(a, b), min(c, d))
+
+
+@njit(cache=NUMBA_CACHE, fastmath=FASTMATH, inline="always")
+def _max4(a, b, c, d):
+    return max(max(a, b), max(c, d))
 
 
 @njit(parallel=True, cache=NUMBA_CACHE, fastmath=FASTMATH)
-def _count_signchange_f(bx, by, bz):
+def _mark_candidates_f(bx, by, bz, mask):
+    """Fortran layout: parallel over z layers k, rows along x.
+
+    Sets bit ``j*(nx-1) + i`` of ``mask[k]`` for every candidate cell (i, j, k).
+    """
     nx, ny, nz = bx.shape
-    counts = np.zeros(nz - 1, dtype=np.int64)
     for k in prange(nz - 1):
-        c = 0
+        mn = np.empty((3, nx))
+        mx = np.empty((3, nx))
+        okx = np.empty(nx - 1, dtype=np.bool_)
         for j in range(ny - 1):
+            for i in range(nx):
+                a, b = bx[i, j, k], bx[i, j + 1, k]
+                c, d = bx[i, j, k + 1], bx[i, j + 1, k + 1]
+                mn[0, i] = _min4(a, b, c, d)
+                mx[0, i] = _max4(a, b, c, d)
+            anyx = False
             for i in range(nx - 1):
-                if _all_components_cross_zero(bx, by, bz, i, j, k):
-                    c += 1
-        counts[k] = c
+                okx[i] = (
+                    min(mn[0, i], mn[0, i + 1]) <= 0.0 <= max(mx[0, i], mx[0, i + 1])
+                )
+                anyx |= okx[i]
+            if not anyx:
+                continue
+            for i in range(nx):
+                a, b = by[i, j, k], by[i, j + 1, k]
+                c, d = by[i, j, k + 1], by[i, j + 1, k + 1]
+                mn[1, i] = _min4(a, b, c, d)
+                mx[1, i] = _max4(a, b, c, d)
+                a, b = bz[i, j, k], bz[i, j + 1, k]
+                c, d = bz[i, j, k + 1], bz[i, j + 1, k + 1]
+                mn[2, i] = _min4(a, b, c, d)
+                mx[2, i] = _max4(a, b, c, d)
+            base = j * (nx - 1)
+            for i in range(nx - 1):
+                if (
+                    okx[i]
+                    and min(mn[1, i], mn[1, i + 1])
+                    <= 0.0
+                    <= max(mx[1, i], mx[1, i + 1])
+                    and min(mn[2, i], mn[2, i + 1])
+                    <= 0.0
+                    <= max(mx[2, i], mx[2, i + 1])
+                    and _cell_is_finite(bx, by, bz, i, j, k)
+                ):
+                    bit = base + i
+                    mask[k, bit >> 3] |= np.uint8(1 << (bit & 7))
+
+
+@njit(parallel=True, cache=NUMBA_CACHE, fastmath=FASTMATH)
+def _mark_candidates_c(bx, by, bz, mask):
+    """C layout: parallel over x layers i, rows along z.
+
+    Sets bit ``j*(nz-1) + k`` of ``mask[i]`` for every candidate cell (i, j, k).
+    """
+    nx, ny, nz = bx.shape
+    for i in prange(nx - 1):
+        mn = np.empty((3, nz))
+        mx = np.empty((3, nz))
+        okx = np.empty(nz - 1, dtype=np.bool_)
+        for j in range(ny - 1):
+            for k in range(nz):
+                a, b = bx[i, j, k], bx[i + 1, j, k]
+                c, d = bx[i, j + 1, k], bx[i + 1, j + 1, k]
+                mn[0, k] = _min4(a, b, c, d)
+                mx[0, k] = _max4(a, b, c, d)
+            anyx = False
+            for k in range(nz - 1):
+                okx[k] = (
+                    min(mn[0, k], mn[0, k + 1]) <= 0.0 <= max(mx[0, k], mx[0, k + 1])
+                )
+                anyx |= okx[k]
+            if not anyx:
+                continue
+            for k in range(nz):
+                a, b = by[i, j, k], by[i + 1, j, k]
+                c, d = by[i, j + 1, k], by[i + 1, j + 1, k]
+                mn[1, k] = _min4(a, b, c, d)
+                mx[1, k] = _max4(a, b, c, d)
+                a, b = bz[i, j, k], bz[i + 1, j, k]
+                c, d = bz[i, j + 1, k], bz[i + 1, j + 1, k]
+                mn[2, k] = _min4(a, b, c, d)
+                mx[2, k] = _max4(a, b, c, d)
+            base = j * (nz - 1)
+            for k in range(nz - 1):
+                if (
+                    okx[k]
+                    and min(mn[1, k], mn[1, k + 1])
+                    <= 0.0
+                    <= max(mx[1, k], mx[1, k + 1])
+                    and min(mn[2, k], mn[2, k + 1])
+                    <= 0.0
+                    <= max(mx[2, k], mx[2, k + 1])
+                    and _cell_is_finite(bx, by, bz, i, j, k)
+                ):
+                    bit = base + k
+                    mask[i, bit >> 3] |= np.uint8(1 << (bit & 7))
+
+
+@njit(parallel=True, cache=NUMBA_CACHE)
+def _mask_counts(mask):
+    counts = np.zeros(mask.shape[0], dtype=np.int64)
+    for o in prange(mask.shape[0]):
+        c = 0
+        for w in range(mask.shape[1]):
+            c += _POPCOUNT8[mask[o, w]]
+        counts[o] = c
     return counts
 
 
-@njit(parallel=True, cache=NUMBA_CACHE, fastmath=FASTMATH)
-def _fill_signchange_f(bx, by, bz, offsets, candidates):
-    nx, ny, nz = bx.shape
-    for k in prange(nz - 1):
-        pos = offsets[k]
-        for j in range(ny - 1):
-            for i in range(nx - 1):
-                if _all_components_cross_zero(bx, by, bz, i, j, k):
-                    candidates[pos, 0] = i
-                    candidates[pos, 1] = j
-                    candidates[pos, 2] = k
-                    pos += 1
-
-
-@njit(parallel=True, cache=NUMBA_CACHE, fastmath=FASTMATH)
-def _count_signchange_c(bx, by, bz):
-    nx, ny, nz = bx.shape
-    counts = np.zeros(nx - 1, dtype=np.int64)
-    for i in prange(nx - 1):
-        c = 0
-        for j in range(ny - 1):
-            for k in range(nz - 1):
-                if _all_components_cross_zero(bx, by, bz, i, j, k):
-                    c += 1
-        counts[i] = c
-    return counts
-
-
-@njit(parallel=True, cache=NUMBA_CACHE, fastmath=FASTMATH)
-def _fill_signchange_c(bx, by, bz, offsets, candidates):
-    nx, ny, nz = bx.shape
-    for i in prange(nx - 1):
-        pos = offsets[i]
-        for j in range(ny - 1):
-            for k in range(nz - 1):
-                if _all_components_cross_zero(bx, by, bz, i, j, k):
-                    candidates[pos, 0] = i
-                    candidates[pos, 1] = j
-                    candidates[pos, 2] = k
+@njit(parallel=True, cache=NUMBA_CACHE)
+def _mask_to_cells(mask, n_inner, offsets, out, c_layout):
+    """List the cells marked in ``mask`` (see _mark_candidates_f/_c)."""
+    for o in prange(mask.shape[0]):
+        pos = offsets[o]
+        for w in range(mask.shape[1]):
+            v = mask[o, w]
+            if v == 0:
+                continue
+            for bit in range(8):
+                if (v >> bit) & 1:
+                    b = w * 8 + bit
+                    inner = b % n_inner
+                    j = b // n_inner
+                    if c_layout:
+                        out[pos, 0] = o
+                        out[pos, 2] = inner
+                    else:
+                        out[pos, 0] = inner
+                        out[pos, 2] = o
+                    out[pos, 1] = j
                     pos += 1
 
 
 def get_candidate_cells(bx, by, bz):
     """Return sign-change candidate cells and their count per z layer.
+
+    A cell is a candidate when all 24 field values at its 8 vertices are
+    finite and each component changes sign (or vanishes) over the vertices.
+    The mask uses approximately one bit per cell; output order is independent
+    of the arrays' memory layout.
 
     Returns
     -------
@@ -521,24 +604,26 @@ def get_candidate_cells(bx, by, bz):
     counts : ndarray, shape (nz-1,), int64
         Number of candidates per z layer.
     """
-    nz = bx.shape[2]
+    nx, ny, nz = bx.shape
     c_layout = _is_c_layout(bx)
     if c_layout:
-        outer = _count_signchange_c(bx, by, bz)
+        n_outer, n_inner, kernel = nx - 1, nz - 1, _mark_candidates_c
     else:
-        outer = _count_signchange_f(bx, by, bz)
-    offsets = np.zeros_like(outer)
-    if outer.size > 1:
-        offsets[1:] = np.cumsum(outer[:-1])
-    candidates = np.empty((int(outer.sum()), 3), dtype=INDEX_DTYPE)
+        n_outer, n_inner, kernel = nz - 1, nx - 1, _mark_candidates_f
+    mask = np.zeros((n_outer, (n_inner * (ny - 1) + 7) // 8), dtype=np.uint8)
+    kernel(bx, by, bz, mask)
+    per_outer = _mask_counts(mask)
+    offsets = np.zeros_like(per_outer)
+    if per_outer.size > 1:
+        offsets[1:] = np.cumsum(per_outer[:-1])
+    candidates = np.empty((int(per_outer.sum()), 3), dtype=INDEX_DTYPE)
+    _mask_to_cells(mask, n_inner, offsets, candidates, c_layout)
     if c_layout:
-        _fill_signchange_c(bx, by, bz, offsets, candidates)
         order = np.lexsort((candidates[:, 0], candidates[:, 1], candidates[:, 2]))
         candidates = candidates[order]
         counts = np.bincount(candidates[:, 2], minlength=nz - 1).astype(np.int64)
     else:
-        _fill_signchange_f(bx, by, bz, offsets, candidates)
-        counts = outer
+        counts = per_outer
     return candidates, counts
 
 

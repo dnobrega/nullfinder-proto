@@ -47,8 +47,8 @@ from null_finder import find_magnetic_nulls, topology_report
 # bx, by, bz: arrays of shape (nx, ny, nz), sampled at the nodes (x[i], y[j], z[k])
 res = find_magnetic_nulls(bx, by, bz, x, y, z)
 
-res["pos"]          # (N, 3) null positions
-res["null_type"]    # 1 = A, 2 = B, 3 = As, 4 = Bs, 0 = unknown
+res["pos"]  # (N, 3) null positions
+res["null_type"]  # 1 = A, 2 = B, 3 = As, 4 = Bs, 0 = unknown
 res["null_charge"]  # +1 / -1
 res["spine_vec"], res["fan_normal"]
 res["nearest_opposite_distance_cells"], res["resolution_name"]
@@ -94,6 +94,7 @@ seam cells of a periodic axis are skipped. Use `pad_periodic` first:
 
 ```python
 from null_finder import pad_periodic
+
 res = find_magnetic_nulls(*pad_periodic(bx, by, bz, x, y, z, axes=(0, 1)))
 ```
 
@@ -132,12 +133,16 @@ sign-change candidates:
 The previous version (single file, no exclusion test) took 1.29 s on the same
 field. Temporary memory during refinement is bounded by `chunk_size`.
 
-## Tests
+## Development
 
 ```bash
-pip install -e ".[test]"
-pytest
+pip install -e ".[dev]"
+pytest                 # test suite
+ruff check .           # lint (rules in pyproject.toml)
+ruff format --check .  # formatting
 ```
+
+CI runs all three on every push and pull request.
 
 The suite covers analytic nulls of every type, close pairs inside one cell,
 nulls on grid nodes, invariance under field and length rescaling, axis

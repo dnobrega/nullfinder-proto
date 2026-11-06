@@ -1,9 +1,10 @@
 """Poincare, resolution, periodicity, schema and input validation."""
+
 import numpy as np
 import pytest
+from conftest import offset_grid, pair_field, random_solenoidal, run, sample
 
 import null_finder as nf
-from conftest import offset_grid, pair_field, random_solenoidal, run, sample
 
 
 def test_poincare_matches_charge_in_random_field(random_field):
@@ -11,7 +12,7 @@ def test_poincare_matches_charge_in_random_field(random_field):
     r = run(*B, x, x, x)
     assert len(r["pos"]) > 100
     cells, counts = np.unique(r["cell"], axis=0, return_counts=True)
-    single = {tuple(c) for c, n in zip(cells, counts) if n == 1}
+    single = {tuple(c) for c, n in zip(cells, counts, strict=True) if n == 1}
     sel = np.array([tuple(c) in single for c in r["cell"]])
     agree = np.mean(r["poincare"][sel] == r["null_charge"][sel])
     assert agree > 0.995
@@ -46,7 +47,9 @@ def test_resolution_counts_cells_on_anisotropic_grid():
     r = run(*sample(bilinear_pair(kappa * s**2, kappa), xa, xa, za), xa, xa, za)
     assert len(r["pos"]) == 2
     expected = np.hypot(2 * s / 0.05, 2 * kappa * s / 0.00625)
-    np.testing.assert_allclose(r["nearest_opposite_distance_cells"], expected, rtol=1e-9)
+    np.testing.assert_allclose(
+        r["nearest_opposite_distance_cells"], expected, rtol=1e-9
+    )
     assert set(r["resolution_name"]) == {"marginal"}
     # Normalising by min(dx, dy, dz), as before, would have called it resolved.
     assert r["nearest_opposite_distance"][0] / r["hlocal_min"][0] > 4.0
@@ -56,7 +59,8 @@ def test_isolated_null():
     x, y, z = offset_grid(10)
     r = run(*sample(lambda X, Y, Z: (X, Y, -2 * Z), x, y, z), x, y, z)
     assert r["snapshot_resolution"] == "isolated"
-    assert r["n_isolated"] == 1 and r["nearest_opposite_index"][0] == -1
+    assert r["n_isolated"] == 1
+    assert r["nearest_opposite_index"][0] == -1
 
 
 def test_pad_periodic_closes_the_charge():
@@ -66,20 +70,25 @@ def test_pad_periodic_closes_the_charge():
     r = run(*Bp)
     assert r["total_charge"] == 0
     assert len(r["pos"]) >= len(unpadded["pos"])
-    assert Bp[3].size == 33 and Bp[3][-1] == 32.0
+    assert Bp[3].size == 33
+    assert Bp[3][-1] == 32.0
 
 
 def test_pad_periodic_rejects_nonuniform_axis():
     x = np.array([0.0, 1.0, 3.0, 4.0])
     b = np.zeros((4, 4, 4))
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="not uniform"):
         nf.pad_periodic(b, b, b, x, x, x, axes=(0,))
     out = nf.pad_periodic(b, b, b, x, x, x, axes=(0,), periods={0: 5.0})
     assert out[3][-1] == 5.0
 
 
 def _schema(r):
-    return set(r) | {f"settings.{k}" for k in r["settings"]} | {f"timing.{k}" for k in r["timing"]}
+    return (
+        set(r)
+        | {f"settings.{k}" for k in r["settings"]}
+        | {f"timing.{k}" for k in r["timing"]}
+    )
 
 
 @pytest.mark.parametrize("with_res", [True, False])
@@ -102,7 +111,14 @@ def test_schema_is_stable(with_res):
     for r in results:
         assert r["cell"].dtype == np.int64
         n = len(r["pos"])
-        for key in ("bnorm", "detJ", "null_charge", "poincare", "null_type", "div_residual"):
+        for key in (
+            "bnorm",
+            "detJ",
+            "null_charge",
+            "poincare",
+            "null_type",
+            "div_residual",
+        ):
             assert r[key].shape[0] == n
     assert results[0]["n_candidates"] == 0
     assert len(results[2]["pos"]) == 2
@@ -111,10 +127,13 @@ def test_schema_is_stable(with_res):
 def test_topology_report_runs(capsys):
     x, y, z = offset_grid(12)
     r = run(*sample(pair_field, x, y, z), x, y, z)
-    rep = nf.topology_report(r, expected_charge=0, show_null_table=True, show_pairs=True)
-    assert rep["charge_ok"] and rep["poincare_agreement"] == 1.0
+    rep = nf.topology_report(
+        r, expected_charge=0, show_null_table=True, show_pairs=True
+    )
+    assert rep["charge_ok"]
+    assert rep["poincare_agreement"] == 1.0
     assert "pair resolution" in capsys.readouterr().out
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="use must be"):
         nf.topology_report(r, use="foo", verbose=False)
 
 
@@ -129,7 +148,7 @@ def test_rejects_nonfinite_and_bad_coordinates():
         run(b, b, b, np.array([0, 1, 1, 2, 3.0]), x, x)
     with pytest.raises(ValueError, match="Coordinate sizes"):
         run(b, b, b, np.arange(6.0), x, x)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="cannot both be 0"):
         run(b, b, b, x, x, x, b_tol=0.0, b_tol_rel=0.0)
 
 

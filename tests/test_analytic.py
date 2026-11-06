@@ -1,9 +1,10 @@
 """Nulls of analytic fields: positions, charges, types, geometry."""
+
 import numpy as np
 import pytest
+from conftest import offset_grid, pair_field, run, sample
 
 import null_finder as nf
-from conftest import offset_grid, pair_field, run, sample
 
 
 def test_pair_positions_charges_types():
@@ -16,7 +17,9 @@ def test_pair_positions_charges_types():
     np.testing.assert_allclose(pos[:, 0], [-0.3, 0.3], atol=5e-3)
     np.testing.assert_allclose(pos[:, 1:], 0.0, atol=1e-12)
     np.testing.assert_array_equal(r["null_charge"][order], [1, -1])
-    np.testing.assert_array_equal(r["null_type"][order], [nf.NULL_TYPE_A, nf.NULL_TYPE_B])
+    np.testing.assert_array_equal(
+        r["null_type"][order], [nf.NULL_TYPE_A, nf.NULL_TYPE_B]
+    )
     np.testing.assert_array_equal(r["poincare"], r["null_charge"])
     assert r["total_charge"] == 0
     assert r["snapshot_resolution"] == "resolved"
@@ -25,8 +28,18 @@ def test_pair_positions_charges_types():
 LINEAR = {
     "A": (lambda X, Y, Z: (-X, -Y, 2 * Z), nf.NULL_TYPE_A, 1, (0, 0, 1)),
     "B": (lambda X, Y, Z: (X, Y, -2 * Z), nf.NULL_TYPE_B, -1, (0, 0, 1)),
-    "As": (lambda X, Y, Z: (-X - 2 * Y, 2 * X - Y, 2 * Z), nf.NULL_TYPE_AS, 1, (0, 0, 1)),
-    "Bs": (lambda X, Y, Z: (X - 2 * Y, 2 * X + Y, -2 * Z), nf.NULL_TYPE_BS, -1, (0, 0, 1)),
+    "As": (
+        lambda X, Y, Z: (-X - 2 * Y, 2 * X - Y, 2 * Z),
+        nf.NULL_TYPE_AS,
+        1,
+        (0, 0, 1),
+    ),
+    "Bs": (
+        lambda X, Y, Z: (X - 2 * Y, 2 * X + Y, -2 * Z),
+        nf.NULL_TYPE_BS,
+        -1,
+        (0, 0, 1),
+    ),
     "A_spine_x": (lambda X, Y, Z: (2 * X, -Y, -Z), nf.NULL_TYPE_A, 1, (1, 0, 0)),
 }
 
@@ -49,7 +62,8 @@ def test_linear_null_types(name):
 def test_potential_and_spine_current():
     x, y, z = offset_grid(12)
     pot = run(*sample(LINEAR["B"][0], x, y, z), x, y, z)
-    assert pot["is_potential"][0] and pot["fan_is_perpendicular"][0]
+    assert pot["is_potential"][0]
+    assert pot["fan_is_perpendicular"][0]
     spiral = run(*sample(LINEAR["Bs"][0], x, y, z), x, y, z)
     # Spiral null with current purely along the spine.
     assert not spiral["is_potential"][0]
@@ -59,7 +73,10 @@ def test_potential_and_spine_current():
 
 def test_null_on_grid_node_is_merged():
     xn = np.linspace(-0.5, 0.5, 21)  # contains 0 exactly
-    f = lambda X, Y, Z: (X + X**2, Y, -2 * Z - 2 * X * Z)  # noqa: E731
+
+    def f(X, Y, Z):
+        return X + X**2, Y, -2 * Z - 2 * X * Z
+
     r = run(*sample(f, xn, xn, xn), xn, xn, xn)
     assert r["n_roots_before_dedup"] == 8  # seen from the 8 cells sharing the node
     assert len(r["pos"]) == 1

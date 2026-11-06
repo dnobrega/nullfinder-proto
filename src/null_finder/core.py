@@ -64,24 +64,24 @@ from numba import njit, prange
 from scipy.spatial import cKDTree
 
 __all__ = [
-    "find_magnetic_nulls",
-    "topology_report",
-    "pad_periodic",
-    "get_candidate_cells",
-    "resolution_flag_name",
-    "null_type_name",
-    "NULL_TYPE_UNKNOWN",
     "NULL_TYPE_A",
-    "NULL_TYPE_B",
     "NULL_TYPE_AS",
+    "NULL_TYPE_B",
     "NULL_TYPE_BS",
+    "NULL_TYPE_UNKNOWN",
     "POINCARE_DEGENERATE",
     "POINCARE_NOT_COMPUTED",
-    "RESOLUTION_RESOLVED",
-    "RESOLUTION_MARGINAL",
-    "RESOLUTION_UNRESOLVED",
-    "RESOLUTION_ISOLATED",
     "RESOLUTION_DEGENERATE",
+    "RESOLUTION_ISOLATED",
+    "RESOLUTION_MARGINAL",
+    "RESOLUTION_RESOLVED",
+    "RESOLUTION_UNRESOLVED",
+    "find_magnetic_nulls",
+    "get_candidate_cells",
+    "null_type_name",
+    "pad_periodic",
+    "resolution_flag_name",
+    "topology_report",
 ]
 
 # ============================================================
@@ -232,9 +232,15 @@ def _solve_3x3_scalars(A, b, det_tol_abs, det_tol_rel):
     )
 
     anorm = np.sqrt(
-        a00 * a00 + a01 * a01 + a02 * a02
-        + a10 * a10 + a11 * a11 + a12 * a12
-        + a20 * a20 + a21 * a21 + a22 * a22
+        a00 * a00
+        + a01 * a01
+        + a02 * a02
+        + a10 * a10
+        + a11 * a11
+        + a12 * a12
+        + a20 * a20
+        + a21 * a21
+        + a22 * a22
     )
     det_tol_eff = max(det_tol_abs, det_tol_rel * anorm * anorm * anorm)
 
@@ -266,9 +272,9 @@ def _solve_3x3_scalars(A, b, det_tol_abs, det_tol_rel):
 def _start_q(start_idx):
     """Normalised starting point (q0, q1, q2) for a start index in [0, 27).
 
-      0      : cell centre
-      1..8   : points q in {0.25, 0.75}^3
-      9..26  : remaining points of the 3x3x3 grid q in {0.25, 0.5, 0.75}^3
+    0      : cell centre
+    1..8   : points q in {0.25, 0.75}^3
+    9..26  : remaining points of the 3x3x3 grid q in {0.25, 0.5, 0.75}^3
     """
     if start_idx == 0:
         return 0.5, 0.5, 0.5
@@ -359,22 +365,34 @@ def _trilinear_value_and_jac_cell(bx, by, bz, i, j, k, qx, qy, qz, B, Jq):
         )
 
         Jq[comp, 0] = (
-            -c000 * y0 * z0 + c001 * y0 * z0
-            - c010 * y1 * z0 + c011 * y1 * z0
-            - c100 * y0 * z1 + c101 * y0 * z1
-            - c110 * y1 * z1 + c111 * y1 * z1
+            -c000 * y0 * z0
+            + c001 * y0 * z0
+            - c010 * y1 * z0
+            + c011 * y1 * z0
+            - c100 * y0 * z1
+            + c101 * y0 * z1
+            - c110 * y1 * z1
+            + c111 * y1 * z1
         )
         Jq[comp, 1] = (
-            -c000 * x0 * z0 - c001 * x1 * z0
-            + c010 * x0 * z0 + c011 * x1 * z0
-            - c100 * x0 * z1 - c101 * x1 * z1
-            + c110 * x0 * z1 + c111 * x1 * z1
+            -c000 * x0 * z0
+            - c001 * x1 * z0
+            + c010 * x0 * z0
+            + c011 * x1 * z0
+            - c100 * x0 * z1
+            - c101 * x1 * z1
+            + c110 * x0 * z1
+            + c111 * x1 * z1
         )
         Jq[comp, 2] = (
-            -c000 * x0 * y0 - c001 * x1 * y0
-            - c010 * x0 * y1 - c011 * x1 * y1
-            + c100 * x0 * y0 + c101 * x1 * y0
-            + c110 * x0 * y1 + c111 * x1 * y1
+            -c000 * x0 * y0
+            - c001 * x1 * y0
+            - c010 * x0 * y1
+            - c011 * x1 * y1
+            + c100 * x0 * y0
+            + c101 * x1 * y0
+            + c110 * x0 * y1
+            + c111 * x1 * y1
         )
 
 
@@ -553,8 +571,13 @@ def _subbox_component_may_vanish(a, i, j, k, q0, q1, q2, h, eps):
     hi = -np.inf
     for c in range(8):
         v = _trilinear_scalar(
-            a, i, j, k,
-            q0 + h * (c & 1), q1 + h * ((c >> 1) & 1), q2 + h * ((c >> 2) & 1),
+            a,
+            i,
+            j,
+            k,
+            q0 + h * (c & 1),
+            q1 + h * ((c >> 1) & 1),
+            q2 + h * ((c >> 2) & 1),
         )
         lo = min(lo, v)
         hi = max(hi, v)
@@ -628,10 +651,28 @@ def _exclusion_filter(bx, by, bz, candidates, depth, b_tol_abs, b_tol_rel):
 
 @njit(cache=NUMBA_CACHE, fastmath=FASTMATH)
 def _refine_null_in_cell_from_start(
-    bx, by, bz, x, y, z, i, j, k,
-    q0_start, q1_start, q2_start,
-    max_iter, b_tol_eff, q_tol, det_tol_abs, det_tol_rel,
-    B, Jq, Jphys, Btrial, Jtrial,
+    bx,
+    by,
+    bz,
+    x,
+    y,
+    z,
+    i,
+    j,
+    k,
+    q0_start,
+    q1_start,
+    q2_start,
+    max_iter,
+    b_tol_eff,
+    q_tol,
+    det_tol_abs,
+    det_tol_rel,
+    B,
+    Jq,
+    Jphys,
+    Btrial,
+    Jtrial,
 ):
     """Newton refinement from one start with a residual-decreasing line search.
 
@@ -679,7 +720,9 @@ def _refine_null_in_cell_from_start(
                     bx, by, bz, i, j, k, qnew0, qnew1, qnew2, Btrial, Jtrial
                 )
                 btrial = np.sqrt(
-                    Btrial[0] * Btrial[0] + Btrial[1] * Btrial[1] + Btrial[2] * Btrial[2]
+                    Btrial[0] * Btrial[0]
+                    + Btrial[1] * Btrial[1]
+                    + Btrial[2] * Btrial[2]
                 )
                 if btrial < bnorm:
                     q0, q1, q2 = qnew0, qnew1, qnew2
@@ -775,9 +818,23 @@ def _surviving_leaf_centres(bx, by, bz, i, j, k, max_depth, eps, out):
 
 @njit(parallel=True, cache=NUMBA_CACHE, fastmath=FASTMATH)
 def _refine_candidates(
-    bx, by, bz, x, y, z, candidates,
-    max_iter, b_tol_abs, b_tol_rel, q_tol, det_tol_abs, det_tol_rel,
-    seed_depth, max_seeds, max_roots_per_cell, root_duplicate_q_tol,
+    bx,
+    by,
+    bz,
+    x,
+    y,
+    z,
+    candidates,
+    max_iter,
+    b_tol_abs,
+    b_tol_rel,
+    q_tol,
+    det_tol_abs,
+    det_tol_rel,
+    seed_depth,
+    max_seeds,
+    max_roots_per_cell,
+    root_duplicate_q_tol,
 ):
     """Multi-start Newton in every candidate cell.
 
@@ -812,7 +869,9 @@ def _refine_candidates(
         Bt = np.empty(3, dtype=WORK_DTYPE)
         Jt = np.empty((3, 3), dtype=WORK_DTYPE)
 
-        starts = np.empty((NEWTON_STARTS_PER_CANDIDATE + max_seeds, 3), dtype=WORK_DTYPE)
+        starts = np.empty(
+            (NEWTON_STARTS_PER_CANDIDATE + max_seeds, 3), dtype=WORK_DTYPE
+        )
         for s in range(NEWTON_STARTS_PER_CANDIDATE):
             q0, q1, q2 = _start_q(s)
             starts[s, 0] = q0
@@ -821,20 +880,49 @@ def _refine_candidates(
         nstarts = NEWTON_STARTS_PER_CANDIDATE
         if seed_depth > 0 and max_seeds > 0:
             nstarts += _surviving_leaf_centres(
-                bx, by, bz, i, j, k, seed_depth, b_tol_eff, starts[NEWTON_STARTS_PER_CANDIDATE:]
+                bx,
+                by,
+                bz,
+                i,
+                j,
+                k,
+                seed_depth,
+                b_tol_eff,
+                starts[NEWTON_STARTS_PER_CANDIDATE:],
             )
         cand_attempts[m] = nstarts
 
         nroots = 0
         for s in range(nstarts):
             ok, xn, yn, zn, qx, qy, qz, bn = _refine_null_in_cell_from_start(
-                bx, by, bz, x, y, z, i, j, k, starts[s, 0], starts[s, 1], starts[s, 2],
-                max_iter, b_tol_eff, q_tol, det_tol_abs, det_tol_rel,
-                B, Jq, Jp, Bt, Jt,
+                bx,
+                by,
+                bz,
+                x,
+                y,
+                z,
+                i,
+                j,
+                k,
+                starts[s, 0],
+                starts[s, 1],
+                starts[s, 2],
+                max_iter,
+                b_tol_eff,
+                q_tol,
+                det_tol_abs,
+                det_tol_rel,
+                B,
+                Jq,
+                Jp,
+                Bt,
+                Jt,
             )
             if not ok:
                 continue
-            if not _root_is_new_in_cell(base, nroots, qx, qy, qz, null_q, root_duplicate_q_tol):
+            if not _root_is_new_in_cell(
+                base, nroots, qx, qy, qz, null_q, root_duplicate_q_tol
+            ):
                 continue
             if nroots >= max_roots_per_cell:
                 cand_overflow[m] = True
@@ -854,7 +942,16 @@ def _refine_candidates(
             nroots += 1
         cand_nroots[m] = nroots
 
-    return found_mask, null_pos, null_q, bnorms, jacs, cand_nroots, cand_attempts, cand_overflow
+    return (
+        found_mask,
+        null_pos,
+        null_q,
+        bnorms,
+        jacs,
+        cand_nroots,
+        cand_attempts,
+        cand_overflow,
+    )
 
 
 def _choose_parallel(refine_parallel, n_tasks, threshold):
@@ -870,7 +967,9 @@ def _choose_parallel(refine_parallel, n_tasks, threshold):
     return bool(refine_parallel)
 
 
-def _refine_in_chunks(bx, by, bz, x, y, z, candidates, chunk_size, parallel, kernel_args):
+def _refine_in_chunks(
+    bx, by, bz, x, y, z, candidates, chunk_size, parallel, kernel_args
+):
     """Run the Newton kernel chunk by chunk and keep only the found roots.
 
     Peak temporary memory is about ``1.2 kB * chunk_size * max_roots_per_cell/8``
@@ -914,8 +1013,14 @@ def _refine_in_chunks(bx, by, bz, x, y, z, candidates, chunk_size, parallel, ker
             n_overflow,
         )
     return (
-        np.empty((0, 3)), np.empty((0, 3), dtype=INDEX_DTYPE), np.empty((0, 3)),
-        np.empty(0), np.empty((0, 3, 3)), 0, 0, 0,
+        np.empty((0, 3)),
+        np.empty((0, 3), dtype=INDEX_DTYPE),
+        np.empty((0, 3)),
+        np.empty(0),
+        np.empty((0, 3, 3)),
+        0,
+        0,
+        0,
     )
 
 
@@ -943,7 +1048,9 @@ def _det3_batch(jac):
     return np.linalg.det(jac)
 
 
-def _remove_duplicate_nulls(pos, cell, q, bnorm, jac, x, y, z, duplicate_tol, duplicate_tol_factor):
+def _remove_duplicate_nulls(
+    pos, cell, q, bnorm, jac, x, y, z, duplicate_tol, duplicate_tol_factor
+):
     """Merge same-charge roots closer than a local tolerance.
 
     Two roots are linked when their charges match and their distance is at
@@ -987,7 +1094,7 @@ def _remove_duplicate_nulls(pos, cell, q, bnorm, jac, x, y, z, duplicate_tol, du
             u = parent[u]
         return u
 
-    for u, v in zip(a[link], b[link]):
+    for u, v in zip(a[link], b[link], strict=True):
         ru, rv = find(int(u)), find(int(v))
         if ru != rv:
             parent[rv] = ru
@@ -1017,9 +1124,15 @@ def _solid_angle_triangle(v0, v1, v2):
     t = v0[0] * cx + v0[1] * cy + v0[2] * cz
     denom = (
         1.0
-        + v0[0] * v1[0] + v0[1] * v1[1] + v0[2] * v1[2]
-        + v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]
-        + v2[0] * v0[0] + v2[1] * v0[1] + v2[2] * v0[2]
+        + v0[0] * v1[0]
+        + v0[1] * v1[1]
+        + v0[2] * v1[2]
+        + v1[0] * v2[0]
+        + v1[1] * v2[1]
+        + v1[2] * v2[2]
+        + v2[0] * v0[0]
+        + v2[1] * v0[1]
+        + v2[2] * v0[2]
     )
     if denom == 0.0:
         if t > 0.0:
@@ -1164,7 +1277,17 @@ def _compute_poincare_for_cells(bx, by, bz, x, y, z, cells, max_depth, cos_tol):
     pidx = np.zeros(n, dtype=np.int32)
     for m in prange(n):
         pidx[m] = _poincare_index_cell(
-            bx, by, bz, x, y, z, cells[m, 0], cells[m, 1], cells[m, 2], max_depth, cos_tol
+            bx,
+            by,
+            bz,
+            x,
+            y,
+            z,
+            cells[m, 0],
+            cells[m, 1],
+            cells[m, 2],
+            max_depth,
+            cos_tol,
         )
     return pidx
 
@@ -1202,7 +1325,9 @@ def _empty_classification(N):
     }
 
 
-def _classify_nulls(jacs, current_tol=1.0e-8, div_tol_rel=0.1, classify_traceless=False):
+def _classify_nulls(
+    jacs, current_tol=1.0e-8, div_tol_rel=0.1, classify_traceless=False
+):
     """Classify nulls from the physical Jacobian J = dB_i/dx_j (vectorised).
 
     A null is classified when its eigenvalues have a clear 2+1 structure: two
@@ -1233,7 +1358,11 @@ def _classify_nulls(jacs, current_tol=1.0e-8, div_tol_rel=0.1, classify_traceles
     out["div_warning"][:] = np.isfinite(dr) & (dr > div_tol_rel)
 
     curl = np.stack(
-        [Jf[:, 2, 1] - Jf[:, 1, 2], Jf[:, 0, 2] - Jf[:, 2, 0], Jf[:, 1, 0] - Jf[:, 0, 1]],
+        [
+            Jf[:, 2, 1] - Jf[:, 1, 2],
+            Jf[:, 0, 2] - Jf[:, 2, 0],
+            Jf[:, 1, 0] - Jf[:, 0, 1],
+        ],
         axis=1,
     )
     cn = np.linalg.norm(curl, axis=1)
@@ -1338,7 +1467,9 @@ def _classify_nulls(jacs, current_tol=1.0e-8, div_tol_rel=0.1, classify_traceles
 # ============================================================
 
 
-def _add_resolution_diagnostics(res, x, y, z, resolved_threshold=1.0, marginal_threshold=0.5):
+def _add_resolution_diagnostics(
+    res, x, y, z, resolved_threshold=1.0, marginal_threshold=0.5
+):
     """Nearest opposite-charge null of each null, with distances in grid cells.
 
     Distances are measured in fractional index space, ``cell + q``, so a
@@ -1390,9 +1521,19 @@ def _add_resolution_diagnostics(res, x, y, z, resolved_threshold=1.0, marginal_t
     else:
         pr = np.empty((0, 2), dtype=INDEX_DTYPE)
     pr = pr.astype(INDEX_DTYPE)
-    pd_cells = np.linalg.norm(frac[pr[:, 0]] - frac[pr[:, 1]], axis=1) if len(pr) else np.empty(0)
-    pd_phys = np.linalg.norm(pos[pr[:, 0]] - pos[pr[:, 1]], axis=1) if len(pr) else np.empty(0)
-    pflag = flags_for(pd_cells).astype(np.int8) if len(pr) else np.empty(0, dtype=np.int8)
+    pd_cells = (
+        np.linalg.norm(frac[pr[:, 0]] - frac[pr[:, 1]], axis=1)
+        if len(pr)
+        else np.empty(0)
+    )
+    pd_phys = (
+        np.linalg.norm(pos[pr[:, 0]] - pos[pr[:, 1]], axis=1)
+        if len(pr)
+        else np.empty(0)
+    )
+    pflag = (
+        flags_for(pd_cells).astype(np.int8) if len(pr) else np.empty(0, dtype=np.int8)
+    )
 
     pairs = [
         {
@@ -1405,7 +1546,7 @@ def _add_resolution_diagnostics(res, x, y, z, resolved_threshold=1.0, marginal_t
             "resolution_flag": int(f),
             "resolution_name": resolution_flag_name(f),
         }
-        for (a, b), dp, dc, f in zip(pr, pd_phys, pd_cells, pflag)
+        for (a, b), dp, dc, f in zip(pr, pd_phys, pd_cells, pflag, strict=True)
     ]
 
     n_pair_unres = int(np.sum(pflag == RESOLUTION_UNRESOLVED))
@@ -1429,7 +1570,9 @@ def _add_resolution_diagnostics(res, x, y, z, resolved_threshold=1.0, marginal_t
             "nearest_opposite_distance": d_phys,
             "nearest_opposite_distance_cells": d_cells,
             "resolution_flag": flag,
-            "resolution_name": np.array([resolution_flag_name(f) for f in flag], dtype="<U10"),
+            "resolution_name": np.array(
+                [resolution_flag_name(f) for f in flag], dtype="<U10"
+            ),
             "opposite_pairs": pairs,
             "opposite_pair_index": pr,
             "opposite_pair_distance_cells": pd_cells,
@@ -1438,11 +1581,13 @@ def _add_resolution_diagnostics(res, x, y, z, resolved_threshold=1.0, marginal_t
             "n_unresolved": int(np.sum(flag == RESOLUTION_UNRESOLVED)),
             "n_isolated": int(np.sum(flag == RESOLUTION_ISOLATED)),
             "n_degenerate": int(np.sum(flag == RESOLUTION_DEGENERATE)),
-            "n_opposite_pairs": int(len(pr)),
+            "n_opposite_pairs": len(pr),
             "n_pair_resolved": int(np.sum(pflag == RESOLUTION_RESOLVED)),
             "n_pair_marginal": n_pair_marg,
             "n_pair_unresolved": n_pair_unres,
-            "min_opposite_distance_cells": float(finite.min()) if finite.size else np.inf,
+            "min_opposite_distance_cells": float(finite.min())
+            if finite.size
+            else np.inf,
             "snapshot_resolution": snapshot,
             "resolution_thresholds": {
                 "resolved_threshold": float(resolved_threshold),
@@ -1463,7 +1608,7 @@ def _count_values(arr):
     if arr.size == 0:
         return {}
     vals, counts = np.unique(arr, return_counts=True)
-    return {int(v): int(c) for v, c in zip(vals, counts)}
+    return {int(v): int(c) for v, c in zip(vals, counts, strict=True)}
 
 
 def topology_report(
@@ -1515,25 +1660,44 @@ def topology_report(
         "poincare_computed": poincare_computed,
         "sum_poincare_regular": int(preg.sum()),
         "null_type_counts": {
-            null_type_name(k): v for k, v in _count_values(res.get("null_type", [])).items()
+            null_type_name(k): v
+            for k, v in _count_values(res.get("null_type", [])).items()
         },
     }
     if poincare_computed:
         nonzero = (p == 1) | (p == -1)
-        out["poincare_agreement"] = float(np.mean(p[nonzero] == sign_detJ[nonzero])) if nonzero.any() else np.nan
+        out["poincare_agreement"] = (
+            float(np.mean(p[nonzero] == sign_detJ[nonzero]))
+            if nonzero.any()
+            else np.nan
+        )
 
     if expected_charge is not None:
         out["expected_charge"] = int(expected_charge)
         if use_l == "poincare":
-            out["charge_source_note"] = "Poincare sum is a cell-level diagnostic, not an exact verification."
-            out["charge_ok"] = (out["sum_poincare_regular"] == int(expected_charge)) if poincare_computed else None
+            out["charge_source_note"] = (
+                "Poincare sum is a cell-level diagnostic, not an exact verification."
+            )
+            out["charge_ok"] = (
+                (out["sum_poincare_regular"] == int(expected_charge))
+                if poincare_computed
+                else None
+            )
         else:
             out["charge_ok"] = out["sum_sign_detJ"] == int(expected_charge)
 
     res_keys = (
-        "snapshot_resolution", "min_opposite_distance_cells", "n_resolved", "n_marginal",
-        "n_unresolved", "n_isolated", "n_degenerate", "n_opposite_pairs",
-        "n_pair_resolved", "n_pair_marginal", "n_pair_unresolved",
+        "snapshot_resolution",
+        "min_opposite_distance_cells",
+        "n_resolved",
+        "n_marginal",
+        "n_unresolved",
+        "n_isolated",
+        "n_degenerate",
+        "n_opposite_pairs",
+        "n_pair_resolved",
+        "n_pair_marginal",
+        "n_pair_unresolved",
     )
     has_res = "snapshot_resolution" in res
     if has_res:
@@ -1541,22 +1705,39 @@ def topology_report(
 
     if verbose:
         print("N nulls:", n)
-        print("sign(detJ) counts:", out["sign_detJ_counts"], " sum:", out["sum_sign_detJ"])
+        print(
+            "sign(detJ) counts:", out["sign_detJ_counts"], " sum:", out["sum_sign_detJ"]
+        )
         print("null types:", out["null_type_counts"])
         if poincare_computed:
-            print("Poincare counts:", out["poincare_counts"], " sum (regular):", out["sum_poincare_regular"])
+            print(
+                "Poincare counts:",
+                out["poincare_counts"],
+                " sum (regular):",
+                out["sum_poincare_regular"],
+            )
         else:
             print("Poincare: not computed")
         if expected_charge is not None:
             print("expected charge:", expected_charge, " charge OK:", out["charge_ok"])
         if show_resolution and has_res:
-            print("pair resolution:", res["snapshot_resolution"],
-                  f"(min d_opp = {res['min_opposite_distance_cells']:.3g} cells)")
-            print(f"pair counts: resolved={res['n_pair_resolved']}, marginal={res['n_pair_marginal']}, "
-                  f"unresolved={res['n_pair_unresolved']}, total={res['n_opposite_pairs']}")
-            print(f"per-null counts: resolved={res['n_resolved']}, marginal={res['n_marginal']}, "
-                  f"unresolved={res['n_unresolved']}, isolated={res['n_isolated']}, "
-                  f"degenerate={res['n_degenerate']}")
+            print(
+                "pair resolution:",
+                res["snapshot_resolution"],
+                f"(min d_opp = {res['min_opposite_distance_cells']:.3g} cells)",
+            )
+            print(
+                f"pair counts: resolved={res['n_pair_resolved']}, "
+                f"marginal={res['n_pair_marginal']}, "
+                f"unresolved={res['n_pair_unresolved']}, "
+                f"total={res['n_opposite_pairs']}"
+            )
+            print(
+                f"per-null counts: resolved={res['n_resolved']}, "
+                f"marginal={res['n_marginal']}, "
+                f"unresolved={res['n_unresolved']}, isolated={res['n_isolated']}, "
+                f"degenerate={res['n_degenerate']}"
+            )
         if show_null_table and n > 0 and has_res:
             nshow = min(int(max_rows), n)
             print(f"\nnull table: showing {nshow}/{n}")
@@ -1564,9 +1745,13 @@ def topology_report(
             for i in range(nshow):
                 m = int(res["nearest_opposite_index"][i])
                 d = res["nearest_opposite_distance_cells"][i]
-                print(f"{i:4d} | {sign_detJ[i]:+6d} | {null_type_name(res['null_type'][i]):7s} | "
-                      f"{('-' if m < 0 else str(m)):>11s} | "
-                      f"{('inf' if not np.isfinite(d) else f'{d:9.3f}'):>9s} | {res['resolution_name'][i]}")
+                tname = null_type_name(res["null_type"][i])
+                mstr = "-" if m < 0 else str(m)
+                dstr = "inf" if not np.isfinite(d) else f"{d:9.3f}"
+                print(
+                    f"{i:4d} | {sign_detJ[i]:+6d} | {tname:7s} | {mstr:>11s} | "
+                    f"{dstr:>9s} | {res['resolution_name'][i]}"
+                )
             if nshow < n:
                 print(f"... {n - nshow} additional nulls not shown")
         pairs = res.get("opposite_pairs", [])
@@ -1574,8 +1759,11 @@ def topology_report(
             nshow = min(int(max_pairs), len(pairs))
             print(f"\nnearest opposite-charge pairs: showing {nshow}/{len(pairs)}")
             for pr in pairs[:nshow]:
-                print(f"  {pr['i']}-{pr['j']}: charges {pr['charge_i']:+d}/{pr['charge_j']:+d}, "
-                      f"d = {pr['distance_cells']:.3f} cells, {pr['resolution_name']}")
+                print(
+                    f"  {pr['i']}-{pr['j']}: "
+                    f"charges {pr['charge_i']:+d}/{pr['charge_j']:+d}, "
+                    f"d = {pr['distance_cells']:.3f} cells, {pr['resolution_name']}"
+                )
             if nshow < len(pairs):
                 print(f"... {len(pairs) - nshow} additional pairs not shown")
     return out
@@ -1610,10 +1798,14 @@ def pad_periodic(bx, by, bz, x, y, z, axes=(0, 1), periods=None):
     plane ``c[0]`` could be reported twice (at ``c[0]`` and ``c[0] + L``).
     """
     comps = [np.asarray(bx), np.asarray(by), np.asarray(bz)]
-    coords = [np.asarray(x, dtype=float), np.asarray(y, dtype=float), np.asarray(z, dtype=float)]
+    coords = [
+        np.asarray(x, dtype=float),
+        np.asarray(y, dtype=float),
+        np.asarray(z, dtype=float),
+    ]
     periods = dict(periods or {})
     f_order = not _is_c_layout(comps[0])
-    for ax in sorted(set(int(a) for a in axes)):
+    for ax in sorted({int(a) for a in axes}):
         if ax not in (0, 1, 2):
             raise ValueError("axes must contain only 0, 1 or 2.")
         c = coords[ax]
@@ -1874,8 +2066,13 @@ def find_magnetic_nulls(
     poincare_max_depth = int(poincare_max_depth)
     if poincare_max_depth < 0:
         raise ValueError("poincare_max_depth must be >= 0.")
-    for name, val in (("b_tol", b_tol), ("b_tol_rel", b_tol_rel), ("det_tol", det_tol),
-                      ("det_tol_rel", det_tol_rel), ("q_tol", q_tol)):
+    for name, val in (
+        ("b_tol", b_tol),
+        ("b_tol_rel", b_tol_rel),
+        ("det_tol", det_tol),
+        ("det_tol_rel", det_tol_rel),
+        ("q_tol", q_tol),
+    ):
         if not (np.isfinite(val) and val >= 0.0):
             raise ValueError(f"{name} must be finite and >= 0.")
     if b_tol == 0.0 and b_tol_rel == 0.0:
@@ -1884,7 +2081,10 @@ def find_magnetic_nulls(
     raw = [np.asarray(a) for a in (bx, by, bz)]
     input_dtypes = tuple(a.dtype for a in raw)
     dtype = _resolve_field_dtype(input_dtypes, field_dtype)
-    bx, by, bz = (_prepare_field_array(a, n, dtype) for a, n in zip(raw, ("bx", "by", "bz")))
+    bx, by, bz = (
+        _prepare_field_array(a, n, dtype)
+        for a, n in zip(raw, ("bx", "by", "bz"), strict=True)
+    )
     x = _prepare_coord_array(x, "x")
     y = _prepare_coord_array(y, "y")
     z = _prepare_coord_array(z, "z")
@@ -1910,7 +2110,9 @@ def find_magnetic_nulls(
 
     t0 = time.perf_counter()
     if exclusion_depth > 0 and len(candidates):
-        keep = _exclusion_filter(bx, by, bz, candidates, exclusion_depth, float(b_tol), float(b_tol_rel))
+        keep = _exclusion_filter(
+            bx, by, bz, candidates, exclusion_depth, float(b_tol), float(b_tol_rel)
+        )
         refine_cells = np.ascontiguousarray(candidates[keep])
     else:
         refine_cells = candidates
@@ -1918,11 +2120,20 @@ def find_magnetic_nulls(
 
     # --- Newton ------------------------------------------------------------
     n_start_slots = len(refine_cells) * NEWTON_STARTS_PER_CANDIDATE
-    do_parallel = _choose_parallel(refine_parallel, n_start_slots, int(parallel_threshold))
+    do_parallel = _choose_parallel(
+        refine_parallel, n_start_slots, int(parallel_threshold)
+    )
     kernel_args = (
-        int(max_iter), float(b_tol), float(b_tol_rel), float(q_tol),
-        float(det_tol), float(det_tol_rel), exclusion_depth, int(max_seed_starts),
-        max_roots_per_cell, float(root_duplicate_q_tol),
+        int(max_iter),
+        float(b_tol),
+        float(b_tol_rel),
+        float(q_tol),
+        float(det_tol),
+        float(det_tol_rel),
+        exclusion_depth,
+        int(max_seed_starts),
+        max_roots_per_cell,
+        float(root_duplicate_q_tol),
     )
     t0 = time.perf_counter()
     pos, cell, q, bnorm, jac, n_with_root, n_attempts, n_overflow = _refine_in_chunks(
@@ -1932,7 +2143,8 @@ def find_magnetic_nulls(
     n_roots_before_dedup = len(pos)
     if n_overflow:
         warnings.warn(
-            f"max_roots_per_cell={max_roots_per_cell} was reached in {n_overflow} cell(s); "
+            f"max_roots_per_cell={max_roots_per_cell} was reached in "
+            f"{n_overflow} cell(s); "
             "a trilinear cell has at most 6 isolated roots, so these cells probably "
             "contain a degenerate (non-isolated) zero set. Extra roots were discarded.",
             RuntimeWarning,
@@ -1944,7 +2156,16 @@ def find_magnetic_nulls(
     n_dup = 0
     if remove_duplicates and len(pos) > 1:
         pos, cell, q, bnorm, jac, n_dup = _remove_duplicate_nulls(
-            pos, cell, q, bnorm, jac, x, y, z, duplicate_tol, float(duplicate_tol_factor)
+            pos,
+            cell,
+            q,
+            bnorm,
+            jac,
+            x,
+            y,
+            z,
+            duplicate_tol,
+            float(duplicate_tol_factor),
         )
     t_dedup = time.perf_counter() - t0
 
@@ -1964,8 +2185,12 @@ def find_magnetic_nulls(
 
     # --- classification ----------------------------------------------------
     t0 = time.perf_counter()
-    cdict = _classify_nulls(jac, current_tol=current_tol, div_tol_rel=div_tol_rel,
-                            classify_traceless=classify_traceless)
+    cdict = _classify_nulls(
+        jac,
+        current_tol=current_tol,
+        div_tol_rel=div_tol_rel,
+        classify_traceless=classify_traceless,
+    )
     if not classify:
         keep_div = {k: cdict[k] for k in ("div_residual", "div_warning")}
         cdict = _empty_classification(len(pos))
@@ -1985,9 +2210,9 @@ def find_magnetic_nulls(
         **cdict,
         "candidates": candidates,
         "counts": counts,
-        "n_candidates": int(len(candidates)),
+        "n_candidates": len(candidates),
         "n_candidates_excluded": int(len(candidates) - len(refine_cells)),
-        "n_candidates_refined": int(len(refine_cells)),
+        "n_candidates_refined": len(refine_cells),
         "n_candidates_with_success": int(n_with_root),
         "n_candidates_failed": int(len(refine_cells) - n_with_root),
         "n_newton_attempts": int(n_attempts),
@@ -1999,7 +2224,10 @@ def find_magnetic_nulls(
     t0 = time.perf_counter()
     if add_resolution_diagnostics:
         _add_resolution_diagnostics(
-            result, x, y, z,
+            result,
+            x,
+            y,
+            z,
             resolved_threshold=float(resolution_resolved_threshold),
             marginal_threshold=float(resolution_marginal_threshold),
         )
@@ -2040,7 +2268,9 @@ def find_magnetic_nulls(
         "root_duplicate_q_tol": float(root_duplicate_q_tol),
         "field_dtype": str(bx.dtype),
         "field_input_dtypes": tuple(str(d) for d in input_dtypes),
-        "field_layout": "C" if _is_c_layout(bx) else ("F" if bx.flags["F_CONTIGUOUS"] else "strided"),
+        "field_layout": "C"
+        if _is_c_layout(bx)
+        else ("F" if bx.flags["F_CONTIGUOUS"] else "strided"),
         "refine_parallel": bool(do_parallel),
         "num_threads": int(numba.get_num_threads()) if do_parallel else 1,
         "chunk_size": chunk_size,
@@ -2049,19 +2279,35 @@ def find_magnetic_nulls(
 
     if verbose:
         tm = result["timing"]
-        print(f"[null finder] candidates: {result['n_candidates']} "
-              f"(excluded {result['n_candidates_excluded']}, refined {result['n_candidates_refined']})")
-        print(f"[null finder] refine: {'parallel' if do_parallel else 'serial'}, "
-              f"cells with roots {n_with_root}, roots {n_roots_before_dedup}, duplicates removed {n_dup}")
+        print(
+            f"[null finder] candidates: {result['n_candidates']} "
+            f"(excluded {result['n_candidates_excluded']}, "
+            f"refined {result['n_candidates_refined']})"
+        )
+        print(
+            f"[null finder] refine: {'parallel' if do_parallel else 'serial'}, "
+            f"cells with roots {n_with_root}, roots {n_roots_before_dedup}, "
+            f"duplicates removed {n_dup}"
+        )
         if n_overflow:
-            print(f"[null finder] WARNING: max_roots_per_cell reached in {n_overflow} cell(s)")
-        print(f"[null finder] unique nulls: {len(pos)}  (total charge {result['total_charge']})")
-        print("[null finder] timing: " + ", ".join(
-            f"{k[:-2]}={v:.3f}s" for k, v in tm.items()))
+            print(
+                "[null finder] WARNING: max_roots_per_cell reached in "
+                f"{n_overflow} cell(s)"
+            )
+        print(
+            f"[null finder] unique nulls: {len(pos)}  "
+            f"(total charge {result['total_charge']})"
+        )
+        print(
+            "[null finder] timing: "
+            + ", ".join(f"{k[:-2]}={v:.3f}s" for k, v in tm.items())
+        )
         if add_resolution_diagnostics:
-            print(f"[null finder] pair resolution: {result['snapshot_resolution']} "
-                  f"(min d_opp = {result['min_opposite_distance_cells']:.3g} cells, "
-                  f"pairs resolved/marginal/unresolved = {result['n_pair_resolved']}/"
-                  f"{result['n_pair_marginal']}/{result['n_pair_unresolved']})")
+            print(
+                f"[null finder] pair resolution: {result['snapshot_resolution']} "
+                f"(min d_opp = {result['min_opposite_distance_cells']:.3g} cells, "
+                f"pairs resolved/marginal/unresolved = {result['n_pair_resolved']}/"
+                f"{result['n_pair_marginal']}/{result['n_pair_unresolved']})"
+            )
 
     return result

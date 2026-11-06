@@ -1,9 +1,9 @@
 """Results must not depend on units, layout, axis direction or batching."""
+
 import itertools
 
 import numpy as np
 import pytest
-
 from conftest import match, offset_grid, pair_field, run, sample
 
 
@@ -29,14 +29,19 @@ def test_length_scale_invariance(pair, L):
     r = run(*B, L * x, L * y, L * z)
     np.testing.assert_allclose(r["pos"] / L, ref["pos"], atol=1e-12)
     np.testing.assert_array_equal(r["null_charge"], ref["null_charge"])
-    np.testing.assert_allclose(r["nearest_opposite_distance_cells"],
-                               ref["nearest_opposite_distance_cells"], rtol=1e-10)
+    np.testing.assert_allclose(
+        r["nearest_opposite_distance_cells"],
+        ref["nearest_opposite_distance_cells"],
+        rtol=1e-10,
+    )
 
 
-@pytest.mark.parametrize("flips", [f for f in itertools.product([0, 1], repeat=3) if any(f)])
+@pytest.mark.parametrize(
+    "flips", [f for f in itertools.product([0, 1], repeat=3) if any(f)]
+)
 def test_decreasing_axes(pair, flips):
     B, xyz, ref = pair
-    coords = [c[::-1].copy() if fl else c for c, fl in zip(xyz, flips)]
+    coords = [c[::-1].copy() if fl else c for c, fl in zip(xyz, flips, strict=True)]
     sl = tuple(slice(None, None, -1) if fl else slice(None) for fl in flips)
     Bf = [np.asfortranarray(b[sl]) for b in B]
     r = run(*Bf, *coords)
@@ -53,7 +58,9 @@ def test_layouts_give_identical_results(random_field):
     ref = run(*B, x, x, x)
     variants = {
         "C": [np.ascontiguousarray(b) for b in B],
-        "strided": [np.asfortranarray(np.pad(b, ((0, 1), (0, 0), (0, 0))))[:-1] for b in B],
+        "strided": [
+            np.asfortranarray(np.pad(b, ((0, 1), (0, 0), (0, 0))))[:-1] for b in B
+        ],
     }
     for name, Bv in variants.items():
         r = run(*Bv, x, x, x)
@@ -79,7 +86,11 @@ def test_big_endian_input(pair):
 def test_chunking_and_threads_do_not_change_results(random_field):
     B, x = random_field
     ref = run(*B, x, x, x)
-    for kw in ({"chunk_size": 7}, {"refine_parallel": False}, {"refine_parallel": True}):
+    for kw in (
+        {"chunk_size": 7},
+        {"refine_parallel": False},
+        {"refine_parallel": True},
+    ):
         r = run(*B, x, x, x, **kw)
         np.testing.assert_array_equal(r["pos"], ref["pos"], err_msg=str(kw))
 

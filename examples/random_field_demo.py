@@ -2,11 +2,17 @@
 
 Run:  python examples/random_field_demo.py [n]
 """
+
 import sys
 
 import numpy as np
 
-from null_finder import find_magnetic_nulls, null_type_name, pad_periodic, topology_report
+from null_finder import (
+    find_magnetic_nulls,
+    null_type_name,
+    pad_periodic,
+    topology_report,
+)
 
 
 def random_solenoidal(n, seed=1):
@@ -38,7 +44,10 @@ if __name__ == "__main__":
 
     print("\nFirst nulls:")
     for i in range(min(5, len(res["pos"]))):
-        print(f"  {np.round(res['pos'][i], 3)}  {null_type_name(res['null_type'][i]):3s}"
-              f"  charge {res['null_charge'][i]:+d}"
-              f"  angle(j, spine) = {res['current_spine_angle_deg'][i]:5.1f} deg"
-              f"  nearest opposite = {res['nearest_opposite_distance_cells'][i]:.2f} cells")
+        print(
+            f"  {np.round(res['pos'][i], 3)}  {null_type_name(res['null_type'][i]):3s}"
+            f"  charge {res['null_charge'][i]:+d}"
+            f"  angle(j, spine) = {res['current_spine_angle_deg'][i]:5.1f} deg"
+            f"  nearest opposite ="
+            f" {res['nearest_opposite_distance_cells'][i]:.2f} cells"
+        )

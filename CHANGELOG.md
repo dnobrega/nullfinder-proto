@@ -47,7 +47,8 @@ Changes with respect to the original single-file `null_finder.py`.
 - `current_spine_angle_deg`, `nearest_opposite_distance_cells`,
   `opposite_pair_index`, `opposite_pair_distance_cells`, `n_degenerate`,
   `n_candidates_excluded`, `n_candidates_refined`, `null_type_name`.
-- Test suite, README, packaging, CI.
+- Test suite, README, packaging, CI (tests on Linux/macOS, ruff lint and format check).
+- Ruff configuration in `pyproject.toml`; code formatted with `ruff format`.
 
 ### Changed (API)
 - Parameters after `x, y, z` are keyword-only.

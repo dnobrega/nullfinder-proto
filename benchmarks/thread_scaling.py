@@ -2,24 +2,28 @@
 
 The analytic field with 14 known nulls is sampled on an N^3 grid, and
 ``find_magnetic_nulls`` is timed with different numbers of Numba threads. For each
-thread count the script reports the best of ``--repeat`` runs, split by stage, the
-speedup and parallel efficiency with respect to the smallest thread count, and
-checks that the 14 nulls are recovered. Optionally, Chiti's (2020) single-threaded
-finder is timed on the same field for comparison.
+thread count, the script runs an untimed warm-up on the full grid and reports
+median wall time and standard deviation over ``--repeat`` runs. It also reports
+stage timings from the run closest to the median, measured and ideal speedup,
+and parallel efficiency relative to the smallest thread count. It checks the
+14 known nulls. Optionally, Chiti's (2020) single-threaded finder is timed
+repeatedly on the same field for comparison.
 
 Examples
 --------
     python benchmarks/thread_scaling.py --n 1024 --threads 1,2,4,8,16
     python benchmarks/thread_scaling.py --n 512 --chiti Null_Finder/null_finder.py
 
-Memory: the field takes 3 * N^3 * itemsize bytes (about 13 GB for 1024^3 in
-float32, the default dtype). Chiti's finder needs roughly twice as much again,
-and should be compared with --dtype float64: with float32 input it can miss
-nulls.
+Memory: the input field alone takes 3 * N^3 * itemsize bytes (about 12.9 GB
+for 1024^3 in float32, the default dtype). Field generation, intermediate
+arrays, and Chiti's finder require additional memory; the check is only a
+rough baseline estimate, not a peak-memory guarantee. For comparisons with
+Chiti, prefer --dtype float64: with float32 input it can miss nulls.
 The maximum number of threads is set by Numba (environment variable
 NUMBA_NUM_THREADS, by default the number of cores).
 
-Outputs ``thread_scaling_N<N>.csv`` and ``thread_scaling_N<N>.png`` in ``--out``.
+Outputs ``thread_scaling_N<N>.csv`` and ``thread_scaling_N<N>.png`` in
+``benchmarks/results/`` by default (git-ignored). Set ``--out`` to override.
 """
 
 import argparse
@@ -67,16 +71,22 @@ def parse_threads(spec, max_threads):
 
 
 def check_memory(n, dtype, with_chiti, force):
-    need = 3 * n**3 * np.dtype(dtype).itemsize * (3 if with_chiti else 1)
+    field_bytes = 3 * n**3 * np.dtype(dtype).itemsize
+    # Heuristic only: intermediate allocations can greatly exceed this estimate.
+    baseline_bytes = field_bytes * (3 if with_chiti else 1)
     total = physical_memory_bytes()
-    msg = f"Estimated memory: {need / 1e9:.1f} GB"
+    msg = (
+        f"Field storage: {field_bytes / 1e9:.1f} GB; "
+        f"rough baseline estimate: {baseline_bytes / 1e9:.1f} GB "
+        "(not peak memory; field-generation temporaries are excluded)"
+    )
     if total:
-        msg += f" of {total / 1e9:.1f} GB physical"
+        msg += f"; physical memory: {total / 1e9:.1f} GB"
     print(msg)
-    if total and need > 0.85 * total and not force:
+    if total and baseline_bytes > 0.85 * total and not force:
         raise SystemExit(
-            "Not enough memory for this grid. Use a smaller --n, --dtype float32, "
-            "drop --chiti, or pass --force to try anyway."
+            "Memory estimate is too close to physical RAM. Use a smaller --n, "
+            "--dtype float32, drop --chiti, or pass --force to try anyway."
         )
 
 
@@ -94,14 +104,22 @@ def run_nullfinder(bx, by, bz, c):
     return time.perf_counter() - t0, res
 
 
+def timing_stats(times):
+    """Return median, mean, sample SD (or 0 for one run), and minimum."""
+    values = np.asarray(times, dtype=float)
+    return {
+        "total_s": float(np.median(values)),
+        "total_mean_s": float(np.mean(values)),
+        "total_std_s": float(np.std(values, ddof=1)) if len(values) > 1 else 0.0,
+        "total_min_s": float(np.min(values)),
+        "n_repeats": len(values),
+    }
+
+
 def scaling(n, dtype, threads, repeat, chiti_path=None):
     """Run the benchmark. Returns (rows, chiti_row or None, info dict)."""
     c = create_grid(n)
     h = c[1] - c[0]
-
-    # Compile (and start the thread pool) on a small grid of the same dtype.
-    cw = create_grid(16)
-    run_nullfinder(*olshevsky2020_field(cw, cw, cw, dtype=dtype), cw)
 
     t0 = time.perf_counter()
     bx, by, bz = olshevsky2020_field(c, c, c, dtype=dtype)
@@ -113,20 +131,27 @@ def scaling(n, dtype, threads, repeat, chiti_path=None):
     try:
         for t in threads:
             numba.set_num_threads(t)
-            best = None
-            for _ in range(repeat):
-                wall, res = run_nullfinder(bx, by, bz, c)
-                if best is None or wall < best[0]:
-                    best = (wall, res)
-            wall, res = best
+            # The first call on the REAL grid is deliberately untimed. It
+            # includes JIT compilation on the first iteration, and warms caches
+            # and the thread pool under the same workload used for measurement.
+            run_nullfinder(bx, by, bz, c)
+            trials = [run_nullfinder(bx, by, bz, c) for _ in range(repeat)]
+            stats = timing_stats([wall for wall, _ in trials])
+            # Use a single actual run for all stage timings, so that their
+            # breakdown is consistent with its measured total wall time.
+            idx = min(
+                range(len(trials)),
+                key=lambda i: abs(trials[i][0] - stats["total_s"]),
+            )
+            representative_wall, res = trials[idx]
             names = [nf.null_type_name(k) for k in res["null_type"]]
             matched, types_ok, d = match_exact(res["pos"], names, h=h)
             tm = res["timing"]
             row = {
                 "threads": t,
-                "total_s": wall,
+                **stats,
                 **{k: tm[k] for k in STAGES},
-                "other_s": wall - sum(tm[k] for k in STAGES),
+                "other_s": representative_wall - sum(tm[k] for k in STAGES),
                 "found": len(res["pos"]),
                 "matched": matched,
                 "types_ok": types_ok,
@@ -134,8 +159,10 @@ def scaling(n, dtype, threads, repeat, chiti_path=None):
             }
             rows.append(row)
             print(
-                f"  {t:3d} threads: {wall:8.3f} s  (scan {tm['candidate_s']:.3f}, "
-                f"exclusion {tm['exclusion_s']:.3f}, Newton {tm['refine_s']:.3f})  "
+                f"  {t:3d} threads: median {stats['total_s']:8.3f} s "
+                f"(SD {stats['total_std_s']:.3f}, min {stats['total_min_s']:.3f}; "
+                f"scan {tm['candidate_s']:.3f}, exclusion {tm['exclusion_s']:.3f}, "
+                f"Newton {tm['refine_s']:.3f})  "
                 f"nulls {row['found']}, matched {matched}/14, types ok {types_ok}"
             )
     finally:
@@ -144,8 +171,13 @@ def scaling(n, dtype, threads, repeat, chiti_path=None):
     base = rows[0]
     for r in rows:
         r["speedup"] = base["total_s"] / r["total_s"]
-        r["efficiency"] = r["speedup"] * base["threads"] / r["threads"]
-        r["speedup_scan"] = base["candidate_s"] / r["candidate_s"]
+        r["ideal_speedup"] = r["threads"] / base["threads"]
+        r["parallel_efficiency"] = r["speedup"] / r["ideal_speedup"]
+        r["speedup_scan"] = (
+            base["candidate_s"] / r["candidate_s"]
+            if r["candidate_s"] > 0
+            else np.nan
+        )
 
     chiti_row = None
     if chiti_path is not None:
@@ -156,14 +188,27 @@ def scaling(n, dtype, threads, repeat, chiti_path=None):
                 "for a like-for-like comparison."
             )
         mod = load_chiti(chiti_path)
-        t0 = time.perf_counter()
-        nulls = mod.find_nulls(n, n, n, c, c, c, bx, by, bz)
-        wall = time.perf_counter() - t0
+
+        def call_chiti():
+            start = time.perf_counter()
+            nulls = mod.find_nulls(n, n, n, c, c, c, bx, by, bz)
+            return time.perf_counter() - start, nulls
+
+        # Same policy as for nullfinder_proto: warm up, then time repeats.
+        call_chiti()
+        chiti_trials = [call_chiti() for _ in range(repeat)]
+        chiti_stats = timing_stats([wall for wall, _ in chiti_trials])
+        idx = min(
+            range(len(chiti_trials)),
+            key=lambda i: abs(chiti_trials[i][0] - chiti_stats["total_s"]),
+        )
+        nulls = chiti_trials[idx][1]
         pos = np.array([[q["x"], q["y"], q["z"]] for q in nulls]).reshape(-1, 3)
         matched, _, _ = match_exact(pos, h=h)
-        chiti_row = {"total_s": wall, "found": len(pos), "matched": matched}
+        chiti_row = {**chiti_stats, "found": len(pos), "matched": matched}
         print(
-            f"  Chiti (single thread): {wall:8.3f} s  "
+            f"  Chiti (single thread): median {chiti_row['total_s']:8.3f} s "
+            f"(SD {chiti_row['total_std_s']:.3f}), "
             f"nulls {len(pos)}, matched {matched}/14"
         )
 
@@ -171,6 +216,8 @@ def scaling(n, dtype, threads, repeat, chiti_path=None):
         "n": n,
         "dtype": np.dtype(dtype).name,
         "field_build_s": t_field,
+        "timing_statistic": "median wall time (excluding full-grid warm-up)",
+        "stage_timing": "one run closest to median wall time",
         "cpu_count": os.cpu_count(),
         "numba_max_threads": max_threads,
         "threading_layer": numba.threading_layer(),
@@ -184,7 +231,8 @@ def write_csv(rows, chiti_row, info, path):
         for k, v in info.items():
             f.write(f"# {k}: {v}\n")
         if chiti_row:
-            f.write(f"# chiti_total_s: {chiti_row['total_s']:.6g}\n")
+            for k, v in chiti_row.items():
+                f.write(f"# chiti_{k}: {v}\n")
         w = csv.DictWriter(f, fieldnames=list(rows[0]))
         w.writeheader()
         w.writerows(rows)
@@ -198,21 +246,26 @@ def plot(rows, chiti_row, info, path):
 
     th = np.array([r["threads"] for r in rows])
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.2))
-    ax1.loglog(th, [r["total_s"] for r in rows], "o-", label="nullfinder_proto (total)")
+    ax1.loglog(
+        th, [r["total_s"] for r in rows], "o-", label="nullfinder_proto (median)"
+    )
     ax1.loglog(th, [r["candidate_s"] for r in rows], "s--", label="candidate scan")
     newton = [r["exclusion_s"] + r["refine_s"] for r in rows]
     ax1.loglog(th, newton, "^:", label="exclusion + Newton")
     if chiti_row:
-        ax1.axhline(chiti_row["total_s"], color="k", ls="-.", label="Chiti (1 thread)")
+        ax1.axhline(
+            chiti_row["total_s"], color="k", ls="-.", label="Chiti (median, 1 thread)"
+        )
     ax1.set(xlabel="Numba threads", ylabel="time [s]")
     ax1.set_title(f"{info['n']}$^3$ grid, {info['dtype']}")
     ax1.grid(True, which="both", alpha=0.3)
     ax1.legend(fontsize=8)
 
-    ax2.plot(th, [r["speedup"] for r in rows], "o-", label="total")
+    ax2.plot(th, [r["speedup"] for r in rows], "o-", label="measured speedup")
     ax2.plot(th, [r["speedup_scan"] for r in rows], "s--", label="candidate scan")
-    ax2.plot(th, th / th[0], "k:", label="ideal")
+    ax2.plot(th, [r["ideal_speedup"] for r in rows], "k:", label="ideal speedup")
     ax2.set(xlabel="Numba threads", ylabel=f"speedup vs {th[0]} thread(s)")
+    ax2.set_title("Strong scaling")
     ax2.grid(True, alpha=0.3)
     ax2.legend(fontsize=8)
     from matplotlib.ticker import NullFormatter
@@ -230,12 +283,24 @@ def main(argv=None):
     p.add_argument("--n", type=int, default=1024, help="grid points per direction")
     p.add_argument("--dtype", default="float32", choices=["float32", "float64"])
     p.add_argument("--threads", default="auto", help='e.g. "1,2,4,8" (default: auto)')
-    p.add_argument("--repeat", type=int, default=3, help="runs per thread count")
+    p.add_argument(
+        "--repeat", type=int, default=3,
+        help="timed repetitions per thread count (plus one untimed warm-up)",
+    )
     p.add_argument("--chiti", type=Path, help="path to Chiti's null_finder.py")
-    p.add_argument("--out", type=Path, default=Path("."), help="output folder")
+    p.add_argument(
+        "--out",
+        type=Path,
+        default=Path(__file__).resolve().parent / "results",
+        help="output folder (default: benchmarks/results/, ignored by Git)",
+    )
     p.add_argument("--no-plot", action="store_true", help="skip the PNG figure")
     p.add_argument("--force", action="store_true", help="skip the memory check")
     a = p.parse_args(argv)
+    if a.repeat < 1:
+        p.error("--repeat must be >= 1")
+    if a.n < 2:
+        p.error("--n must be >= 2")
 
     threads = parse_threads(a.threads, numba.config.NUMBA_NUM_THREADS)
     check_memory(a.n, a.dtype, a.chiti is not None, a.force)
@@ -243,16 +308,19 @@ def main(argv=None):
 
     b = rows[0]["threads"]
     sp = f"speedup (T{b}/Tn)"
-    ef = "efficiency (speedup/n)" if b == 1 else f"efficiency (speedup*{b}/n)"
-    print(f"\n{'threads':>7}  {'time [s]':>9}  {sp:>16}  {ef:>24}")
+    print(
+        f"\n{'threads':>7}  {'median [s]':>11}  {'SD [s]':>9}  "
+        f"{sp:>16}  {'ideal':>8}  {'parallel eff.':>13}"
+    )
     for r in rows:
         print(
-            f"{r['threads']:7d}  {r['total_s']:9.3f}  "
-            f"{r['speedup']:16.2f}  {r['efficiency']:24.0%}"
+            f"{r['threads']:7d}  {r['total_s']:11.3f}  "
+            f"{r['total_std_s']:9.3f}  {r['speedup']:16.2f}  "
+            f"{r['ideal_speedup']:8.2f}  {r['parallel_efficiency']:13.0%}"
         )
     print(
-        f"speedup: time with {b} thread(s) / time with n threads. "
-        "efficiency: fraction of the ideal speedup (100 % = ideal)."
+        f"speedup = T({b}) / T(n); ideal speedup = n/{b}; "
+        "parallel efficiency = measured / ideal (100% is ideal)."
     )
     if chiti_row:
         fastest = min(r["total_s"] for r in rows)

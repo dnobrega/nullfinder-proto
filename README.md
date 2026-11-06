@@ -41,7 +41,7 @@ Centre for Solar Physics, University of Oslo).
 ```bash
 pip install git+https://github.com/dnobrega/nullfinder-proto.git
 # or, from a clone
-pip install -e ".[test]"
+pip install -e .
 ```
 
 Requires Python ≥ 3.10, NumPy, SciPy and Numba. The first call compiles the

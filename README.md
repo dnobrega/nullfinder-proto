@@ -238,6 +238,19 @@ originates in OpenMP, not in the null-finding algorithm. For the Intel OpenMP
 runtime, `KMP_WARNINGS=false` may suppress informational messages; alternatively
 use a supported Numba backend such as TBB if it is installed.
 
+## Experimental Apple Metal benchmark
+
+An optional, **completed feasibility experiment** in
+[`benchmarks/metal_candidate_scan.py`](benchmarks/metal_candidate_scan.py)
+compares three GPU candidate-scan strategies (`mask`, `compact`, `column`) with
+Numba on Apple Silicon. It is **not** a GPU implementation of the complete null
+finder, and MLX is **not required** to install or use `nullfinder-proto`.
+
+See [the experiment report](benchmarks/METAL_EXPERIMENT.md) for measured results,
+reproduction commands and the distinction between MLX-backed shared buffers and
+NumPy inputs. The experiment is retained for reference, not recommended as the
+default backend for analyzing stored MHD snapshots.
+
 ## Development
 
 ```bash

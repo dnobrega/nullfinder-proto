@@ -114,12 +114,16 @@ def _fill(bx, by, bz, x, y, z, gx, gy, gz, fx, fy, fz, c):
                 bz[i, j, k] = vz
 
 
-def olshevsky2020_field(x, y, z, dtype=np.float64):
-    """Benchmark field on the grid x * y * z (Numba-parallel).
+def olshevsky2020_field(x, y, z, dtype=np.float64, *, out=None):
+    """Evaluate the benchmark field on the Cartesian product of x, y and z.
 
-    Returns Fortran-ordered ``bx, by, bz`` of shape (nx, ny, nz) and ``dtype``.
-    Values are computed in float64 and stored in ``dtype``, so the peak memory is
-    just the three output arrays.
+    By default, allocate three Fortran-ordered output arrays using ``dtype``.
+    If ``out=(bx, by, bz)`` is supplied, write directly into the given writable
+    float32/float64 NumPy arrays without allocating the output fields. In this
+    case the arrays' dtype takes precedence over ``dtype``. In particular,
+    non-owning Fortran-order views of preallocated MLX buffers are supported.
+
+    Intermediate one-dimensional Gaussian factors are allocated in float64.
     """
     x, y, z = (np.ascontiguousarray(c, dtype=float) for c in (x, y, z))
     a, kappa, ell, X0, Y0, Z0 = (np.ascontiguousarray(p) for p in PARAMS_A1.T)
@@ -135,9 +139,27 @@ def olshevsky2020_field(x, y, z, dtype=np.float64):
     gz = np.exp(-(dz**2) / wz[:, None] ** 2)
     c = 2.0 * a * kappa / a**2
     shape = (x.size, y.size, z.size)
-    out = [np.empty(shape, dtype=dtype, order="F") for _ in range(3)]
-    _fill(*out, x, y, z, gx, gy, gz, dx * gx, dy * gy, dz * gz, c)
-    return tuple(out)
+    if out is None:
+        result = tuple(np.empty(shape, dtype=dtype, order="F") for _ in range(3))
+    else:
+        if not isinstance(out, (tuple, list)) or len(out) != 3:
+            raise ValueError("out must contain exactly three NumPy arrays")
+        result = tuple(out)
+        for name, field in zip(("bx", "by", "bz"), result, strict=True):
+            if not isinstance(field, np.ndarray):
+                raise TypeError(f"out[{name}] must be a NumPy ndarray")
+            if field.shape != shape:
+                raise ValueError(
+                    f"out[{name}] has shape {field.shape}; expected {shape}"
+                )
+            if field.dtype not in (np.dtype("float32"), np.dtype("float64")):
+                raise TypeError(f"out[{name}] must have dtype float32 or float64")
+            if not field.flags.writeable:
+                raise ValueError(f"out[{name}] must be writable")
+        if len({field.dtype for field in result}) != 1:
+            raise TypeError("out must contain three arrays with the same dtype")
+    _fill(*result, x, y, z, gx, gy, gz, dx * gx, dy * gy, dz * gz, c)
+    return result
 
 
 def match_exact(pos, types=None, tol=None, h=None):

@@ -4,7 +4,7 @@
 This is an experiment, NOT a GPU null finder. It tests only the necessary
 component-wise sign-change filter and the finite-vertex requirement, and checks
 that every GPU variant returns exactly the same sorted (i, j, k) candidate list
-as the Numba CPU scan ``get_candidate_cells``.
+as the Numba CPU scan ``_get_candidate_cells``.
 
 GPU variants (``--modes``):
 
@@ -77,11 +77,13 @@ except ImportError as exc:
 ROOT = Path(__file__).resolve().parent.parent
 if (ROOT / "src" / "nullfinder_proto").is_dir():
     sys.path.insert(0, str(ROOT / "src"))
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(ROOT))
 
-from olshevsky2020_field import create_grid, olshevsky2020_field  # noqa: E402
-
-from nullfinder_proto import get_candidate_cells  # noqa: E402
+from benchmarks.olshevsky2020_field import (  # noqa: E402
+    create_grid,
+    olshevsky2020_field,
+)
+from nullfinder_proto.core import _get_candidate_cells  # noqa: E402
 
 ALL_MODES = ("column", "mask", "compact")
 
@@ -653,7 +655,7 @@ def self_test(modes, threadgroup, capacity, kchunk):
         mode = Mode(name, threadgroup, capacity, kchunk)
         for fields in cases:
             shape = fields[0].shape
-            cpu, _ = get_candidate_cells(*fields)
+            cpu, _ = _get_candidate_cells(*fields)
             if name == "compact" and len(cpu) > capacity:
                 continue  # overflow is tested separately below
             nx, ny, _ = shape
@@ -725,7 +727,7 @@ def time_cpu(fields, repeat, threads, chunksize):
         numba.set_num_threads(threads)
         numba.set_parallel_chunksize(chunksize)
         q = np.ones((4, 4, 4), dtype=np.float32, order="F")
-        get_candidate_cells(q, q, q)  # compilation before timing
+        _get_candidate_cells(q, q, q)  # compilation before timing
         layer = numba.threading_layer()
         if chunksize > 0 and layer != "tbb":
             warnings.warn(
@@ -734,11 +736,11 @@ def time_cpu(fields, repeat, threads, chunksize):
                 RuntimeWarning,
                 stacklevel=2,
             )
-        get_candidate_cells(*fields)  # warm-up on the real data
+        _get_candidate_cells(*fields)  # warm-up on the real data
         measured, cpu = [], None
         for _ in range(repeat):
             t0 = time.perf_counter()
-            cpu, _ = get_candidate_cells(*fields)
+            cpu, _ = _get_candidate_cells(*fields)
             measured.append(time.perf_counter() - t0)
     finally:
         numba.set_parallel_chunksize(before_chunk)

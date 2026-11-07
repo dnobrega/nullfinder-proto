@@ -9,7 +9,7 @@ MLX remains an optional benchmark-only dependency.
 ## Question and methods
 
 We tested whether Apple Metal/MLX can outperform the optimized CPU
-`get_candidate_cells()` scan when searching for candidate magnetic-null cells.
+internal `_get_candidate_cells()` scan when searching for candidate magnetic-null cells.
 Every GPU implementation applies the same component-wise sign-change and
 finite-vertex conditions and was checked against the **exact sorted cell-index
 list** produced by the CPU implementation.

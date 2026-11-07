@@ -46,8 +46,12 @@ import numpy as np
 
 import nullfinder_proto as nf
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from olshevsky2020_field import create_grid, match_exact, olshevsky2020_field
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from benchmarks.olshevsky2020_field import (
+    create_grid,
+    match_exact,
+    olshevsky2020_field,
+)
 
 STAGES = ("candidate_s", "exclusion_s", "refine_s")
 

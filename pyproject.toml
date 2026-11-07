@@ -31,6 +31,7 @@ Issues = "https://github.com/dnobrega/nullfinder-proto/issues"
 [project.optional-dependencies]
 test = ["pytest>=7"]
 dev = ["pytest>=7", "ruff>=0.6"]
+benchmark = ["matplotlib", "pandas", "jupyterlab"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

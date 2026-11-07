@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from nullfinder_proto import get_candidate_cells
+from nullfinder_proto.core import _get_candidate_cells
 
 
 def reference_candidates(bx, by, bz):
@@ -42,7 +42,7 @@ def test_scan_matches_reference(shape, layout):
     else:
         B = [np.asfortranarray(np.pad(b, ((0, 2), (0, 0), (0, 0))))[:-2] for b in B]
     ref = reference_candidates(*B)
-    cand, counts = get_candidate_cells(*B)
+    cand, counts = _get_candidate_cells(*B)
     assert len(ref) > 0
     np.testing.assert_array_equal(cand, ref)
     np.testing.assert_array_equal(
@@ -56,9 +56,9 @@ def test_scan_float32_and_no_candidates():
         np.asfortranarray(rng.normal(0, 1, (20, 20, 20)).astype(np.float32))
         for _ in range(3)
     ]
-    np.testing.assert_array_equal(get_candidate_cells(*B)[0], reference_candidates(*B))
+    np.testing.assert_array_equal(_get_candidate_cells(*B)[0], reference_candidates(*B))
     ones = np.ones((6, 6, 6))
-    cand, counts = get_candidate_cells(ones, ones, ones)
+    cand, counts = _get_candidate_cells(ones, ones, ones)
     assert cand.shape == (0, 3)
     assert counts.sum() == 0
 
@@ -80,7 +80,7 @@ def test_scan_excludes_nonfinite_vertex_cells(layout, bad):
     else:
         B = [np.asfortranarray(np.pad(b, ((0, 2), (0, 0), (0, 0))))[:-2] for b in B]
 
-    cand, counts = get_candidate_cells(*B)
+    cand, counts = _get_candidate_cells(*B)
     ref = reference_candidates(*B)
     np.testing.assert_array_equal(cand, ref)
     np.testing.assert_array_equal(
@@ -95,8 +95,15 @@ def test_scan_fields_with_mixed_contiguity():
     B[1] = np.ascontiguousarray(B[1])
     B[2] = np.asfortranarray(np.pad(B[2], ((0, 1), (0, 0), (0, 0))))[:-1]
     ref = reference_candidates(*B)
-    cand, counts = get_candidate_cells(*B)
+    cand, counts = _get_candidate_cells(*B)
     np.testing.assert_array_equal(cand, ref)
     np.testing.assert_array_equal(
         counts, np.bincount(ref[:, 2], minlength=B[0].shape[2] - 1)
     )
+
+
+def test_candidate_scan_is_internal_only():
+    import nullfinder_proto
+
+    assert not hasattr(nullfinder_proto, "get_candidate_cells")
+    assert "get_candidate_cells" not in nullfinder_proto.__all__

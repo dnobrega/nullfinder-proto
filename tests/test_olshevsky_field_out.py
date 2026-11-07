@@ -1,14 +1,9 @@
 """CPU-only regression tests for filling preallocated benchmark buffers."""
 
-import sys
-from pathlib import Path
-
 import numpy as np
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "benchmarks"))
-
-from olshevsky2020_field import create_grid, olshevsky2020_field
+from benchmarks.olshevsky2020_field import create_grid, olshevsky2020_field
 
 
 @pytest.mark.parametrize("dtype", [np.float32, np.float64])

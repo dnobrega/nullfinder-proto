@@ -67,7 +67,7 @@ package is distributed as `nullfinder-proto` and imported as `nullfinder_proto`.
 - Test suite, README, packaging, CI (tests on Linux/macOS, ruff lint and format check).
 - Ruff configuration in `pyproject.toml`; code formatted with `ruff format`.
 - Benchmark notebook on the Olshevsky et al. (2020) analytic field
-  (`benchmarks/`), with optional comparison to other implementations.
+  (`benchmarks/`), with optional comparison to Chiti's implementation.
 - Authors, `CITATION.cff`, how to cite and acknowledgements.
 - BSD 3-Clause license.
 - `benchmarks/thread_scaling.py`: thread-scaling benchmark on a large
@@ -89,7 +89,7 @@ package is distributed as `nullfinder-proto` and imported as `nullfinder_proto`.
   clarify the conditions for Poincaré-index agreement and charge conservation.
 - Use the same half-grid matching threshold in the README and Olshevsky
   notebook; document the optional Chiti finder and benchmark environment.
-- Document assumptions of the illustrative Bifrost staggered-grid conversion,
+- State the co-location requirement for magnetic-field components,
   update acknowledgments and ignore generated notebook files.
 - Document the single-pass candidate-scan benchmark and strong-scaling
   measurements in the README.

@@ -1,16 +1,12 @@
 """Smoke tests of the benchmark scripts on small grids (not run in full in CI)."""
 
-import sys
 import warnings
-from pathlib import Path
 
 import numpy as np
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "benchmarks"))
-
-import thread_scaling
-from olshevsky2020_field import (
+from benchmarks import thread_scaling
+from benchmarks.olshevsky2020_field import (
     EXACT_NULLS,
     PARAMS_A1,
     create_grid,

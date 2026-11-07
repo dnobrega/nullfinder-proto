@@ -11,3 +11,5 @@ dist/
 .ipynb_checkpoints/
 benchmarks/_bench_modules/
 benchmarks/results/
+# Notebook temporary imports, including when launched from the repository root
+_bench_modules/

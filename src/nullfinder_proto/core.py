@@ -32,13 +32,8 @@ Pipeline
 Conventions
 -----------
 * ``x, y, z`` are 1D, finite and strictly monotonic (increasing or decreasing).
-* All three components must be sampled at the grid nodes ``(x[i], y[j], z[k])``.
-  **Staggered data must be interpolated to a common location first.**  In
-  Bifrost, for example, ``bx, by, bz`` live on cell faces (``bx`` at
-  ``x - dx/2`` etc.).  Passing face-centred components together with
-  cell-centred coordinates shifts each component by half a cell, which near a
-  null is an error comparable to ``B`` itself and can create or destroy null
-  pairs.
+* All three field components must be sampled at the same grid nodes
+  ``(x[i], y[j], z[k])``; the caller is responsible for ensuring this.
 * The Jacobian is ``J[a, b] = dB_a / dx_b`` of the trilinear interpolant of the
   containing cell, in field units per coordinate unit.  Newton, the Jacobian,
   the classification and the spine/fan geometry all use this same local
@@ -78,7 +73,6 @@ __all__ = [
     "RESOLUTION_RESOLVED",
     "RESOLUTION_UNRESOLVED",
     "find_magnetic_nulls",
-    "get_candidate_cells",
     "null_type_name",
     "pad_periodic",
     "resolution_flag_name",
@@ -588,7 +582,7 @@ def _mask_to_cells(mask, n_inner, offsets, out, c_layout):
                     pos += 1
 
 
-def get_candidate_cells(bx, by, bz):
+def _get_candidate_cells(bx, by, bz):
     """Return sign-change candidate cells and their count per z layer.
 
     A cell is a candidate when all 24 field values at its 8 vertices are
@@ -1953,10 +1947,9 @@ def find_magnetic_nulls(
     Parameters
     ----------
     bx, by, bz : ndarray, shape (nx, ny, nz)
-        Field components sampled at the grid nodes (see the module docstring
-        about staggered data).  Any memory layout and floating dtype is
-        accepted without copying; components are only cast if their dtypes
-        differ or ``field_dtype`` asks for it.
+        Field components sampled at the same grid nodes. Any memory layout
+        and floating dtype is accepted without copying; components are only cast if
+        their dtypes differ or ``field_dtype`` asks for it.
     x, y, z : 1D ndarray
         Node coordinates, sizes nx, ny, nz; finite and strictly monotonic
         (increasing or decreasing).
@@ -2189,7 +2182,7 @@ def find_magnetic_nulls(
 
     # --- candidates and exclusion ------------------------------------------
     t0 = time.perf_counter()
-    candidates, counts = get_candidate_cells(bx, by, bz)
+    candidates, counts = _get_candidate_cells(bx, by, bz)
     t_candidates = time.perf_counter() - t0
 
     t0 = time.perf_counter()

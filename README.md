@@ -59,7 +59,6 @@ package directory is read-only, set `NUMBA_CACHE_DIR` to a writable folder.
 ## Quick start
 
 ```python
-import numpy as np
 from nullfinder_proto import find_magnetic_nulls, topology_report
 
 # bx, by, bz: arrays of shape (nx, ny, nz), sampled at the nodes (x[i], y[j], z[k])
@@ -71,7 +70,7 @@ res["null_charge"]  # +1 / -1
 res["spine_vec"], res["fan_normal"]
 res["nearest_opposite_distance_cells"], res["resolution_name"]
 
-topology_report(res)
+report = topology_report(res)
 ```
 
 See the docstring of `find_magnetic_nulls` for every parameter and every key

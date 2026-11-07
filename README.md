@@ -120,16 +120,17 @@ res = find_magnetic_nulls(*pad_periodic(bx, by, bz, x, y, z, axes=(0, 1)))
 | `current_spine_angle_deg` | Angle between `curl B` and the spine axis: 0° for a pure spine current (spiral nulls), 90° for a pure fan current. |
 | `total_charge` | Sum of detected null charges. For a fully periodic domain with all isolated nulls accounted for, the net charge is expected to be zero. In an open volume, the total charge need not vanish: when B is nonzero on the boundary, it equals the degree of the field-direction map on that boundary. |
 
-## Limitations
 
-- Degenerate nulls (line or sheet nulls, `det J = 0`, e.g. 2.5D fields) are
-  not reported.
-- Nulls are those of the trilinear interpolant. Structures below the grid
-  scale are not represented, and close pairs (`unresolved`) should be treated
-  with care.
-- Field values are not validated (no extra pass over the data). Cells with a
-  NaN or infinite vertex value are skipped, so such values never produce a
-  null, but nulls in those cells are missed.
+## Warnings
+
+- The finder detects magnetic null points of the trilinear interpolant,
+  including multiple nulls within the same grid cell. However, 
+  the detection and characterization of degenerate nulls are not guaranteed.
+
+- The user is responsible for providing finite magnetic-field
+  values. To avoid an additional full-volume validation pass,
+  cells containing NaN or Inf at any vertex are skipped.
+  Consequently, nulls located within those cells may be missed.
 
 ## Performance and benchmarks
 

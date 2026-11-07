@@ -39,6 +39,11 @@ Centre for Solar Physics, University of Oslo).
   nearest null of opposite charge, flagged as resolved / marginal / unresolved.
 - **Fast and memory-bounded.** Numba-parallel kernels, chunked refinement.
 
+## License and citation
+
+nullfinder-proto is released under the **[BSD 3-Clause License](LICENSE)**.
+
+If you use nullfinder-proto in scientific research, please cite the repository. Citation information is available in [`CITATION.cff`](CITATION.cff).
 ## Installation
 
 Install directly from GitHub:
@@ -218,12 +223,6 @@ default backend for analyzing stored MHD snapshots.
 - Van Oosterom, A. & Strackee, J. 1983, IEEE Trans. Biomed. Eng., 30, 125 —
   solid angle of a triangle (Poincaré index).
 
-## How to cite
-
-If you use this code, please cite the accompanying paper (Nóbrega-Siverio &
-Moreno-Insertis, in preparation) and the software itself; see
-[`CITATION.cff`](CITATION.cff), or the "Cite this repository" button on GitHub.
-
 ## Acknowledgements
 
 This research has been supported by the European Research Council through the
@@ -234,6 +233,4 @@ Council of Norway through its Centres of Excellence scheme, project number
 de Canarias under the Severo Ochoa Centre of Excellence program and funded by
 MICIU/AEI/10.13039/501100011033.
 
-## License
 
-BSD 3-Clause License; see [`LICENSE`](LICENSE).

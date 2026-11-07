@@ -45,7 +45,7 @@ Install directly from GitHub:
 ```bash
 pip install git+https://github.com/dnobrega/nullfinder-proto.git
 ```
-Or clone the repository for development:
+Or clone the repository:
 ```bash
 git clone https://github.com/dnobrega/nullfinder-proto.git
 cd nullfinder-proto
@@ -80,26 +80,10 @@ self-contained run.
 
 ## Conventions (please read)
 
-**Co-located data.** All three components must be sampled at the same points,
-the grid nodes `(x[i], y[j], z[k])`. Many codes store `B` on a staggered mesh;
-in Bifrost, for instance, the components live on cell faces. Passing
-face-centred components together with cell-centred coordinates shifts each
-component by half a cell. Near a null that error is comparable to `B` itself
-and can create or destroy null pairs. Interpolate to a common location first,
-ideally with the code's own staggered operators. A minimal second-order
-version, assuming `bx[i]` is stored on the face at `x[i] - dx/2` and the
-domain is periodic in x (check the convention of your code):
-
-```python
-bx_c = 0.5 * (bx + np.roll(bx, -1, axis=0))  # value at x[i]
-by_c = 0.5 * (by + np.roll(by, -1, axis=1))
-bz_c = 0.5 * (bz + np.roll(bz, -1, axis=2))  # non-periodic z: handle the last layer
-```
-
-**This is only an illustrative stencil, not a general Bifrost conversion.**
-Verify the actual stagger locations and boundary conditions for each component.
-In particular, `np.roll` wraps the boundary: do not use it unchanged on a
-non-periodic axis. Prefer the simulation code's staggered-grid operators.
+**Co-located data.** The three magnetic-field components `bx`, `by`, and `bz`
+must be sampled at the **same grid nodes** `(x[i], y[j], z[k])`.
+The caller is responsible for supplying co-located field components and
+coordinates consistent with their locations.
 
 **Indexing.** Arrays have shape `(nx, ny, nz)` and are accessed as
 `arr[i, j, k]`. Coordinates are 1D, finite and strictly monotonic.
@@ -143,100 +127,71 @@ res = find_magnetic_nulls(*pad_periodic(bx, by, bz, x, y, z, axes=(0, 1)))
   NaN or infinite vertex value are skipped, so such values never produce a
   null, but nulls in those cells are missed.
 
-## Performance
+## Performance and benchmarks
 
-**Strong scaling (1024³).** Timings of the Olshevsky et al. (2020) analytic
-field with 14 known nulls, comparing the previous two-pass candidate scan
-with the current single-pass bit-mask scan. Both use `float32`, Numba/OpenMP
-on macOS ARM64 (18 logical CPUs reported), and the same grid and field.
-Values are **median search times**, after a full-grid warm-up, excluding
-field generation and JIT compilation; the older version used 5 timed runs,
-the current version 3. Both versions found and correctly classified all 14
-nulls, with the same maximum positional error (1.08×10⁻⁴).
+### Strong scaling
 
-| Numba threads | Previous (s) | Current (s) | Faster by | Current parallel efficiency |
-|---:|---:|---:|---:|---:|
-| 1 | 8.327 | 0.834 | **10.0×** | 100.0% |
-| 2 | 4.248 | 0.438 | **9.7×** | 95.2% |
-| 4 | 2.328 | 0.224 | **10.4×** | 93.0% |
-| 8 | 1.316 | 0.133 | **9.9×** | 78.6% |
-| 16 | — | 0.074 | — | 70.6% |
+The current `nullfinder-proto` implementation was benchmarked on the
+14-null analytic magnetic field of Olshevsky et al. (2020), sampled on a
+`1024³` grid (`float32`, approximately 12.9 GB of field data). Measurements
+were made on Apple Silicon using Numba with **TBB**, dynamic scheduling
+(`chunksize=4`), and seven timed repetitions after warm-up. Times are medians
+for the **complete null search** (not just the candidate scan), excluding
+field generation and JIT compilation. All runs recovered and correctly
+classified the 14 nulls.
 
-At one thread, the candidate scan itself falls from **8.325 s to 0.833 s**
-(about 10×); the exclusion and Newton stages change little. With 16 threads,
-the current implementation takes **0.074 s**, an **11.3× strong-scaling
-speedup** over its own one-thread time (70.6% parallel efficiency). The
-previous version was not measured with 16 threads. These results describe the
-null search on a field already in memory, not the time to generate the field.
+| Numba threads | Time (s) | Speedup | Parallel efficiency |
+|---:|---:|---:|---:|
+| 1 | 0.812 | 1.00× | 100% |
+| 2 | 0.408 | 1.99× | 100% |
+| 4 | 0.213 | 3.82× | 95% |
+| 8 | 0.122 | 6.66× | 83% |
+| 16 | **0.069** | **11.81×** | **74%** |
 
-The current scan performs a single pass using a compact bit mask
-(approximately one bit per cell), reusing 2×2 vertex-block extrema along the
-contiguous memory axis. The benefit depends on the field, memory layout and
-thread count; in particular, this 14-null analytic field is not representative
-of a turbulent simulation with many candidates. Run
-`benchmarks/thread_scaling.py` to measure your own workload. Temporary memory
-during refinement is bounded by `chunk_size`; the candidate mask adds about
-134 MB for a 1024³ grid.
+The scan uses a compact bit mask (approximately one bit per cell); at this
+resolution its mask requires about 134 MB. These timings are specific to the
+analytic field and hardware. Real MHD fields can have different candidate
+densities and performance characteristics.
 
-## Benchmark
+### Numerical validation
 
-`benchmarks/olshevsky2020_null_benchmark.ipynb` applies the finder to the
-analytic field of Olshevsky et al. (2020), with 14 known nulls, at several
-resolutions, and compares it with other implementations, such as the public
-finder of [Chiti (2020)](https://github.com/FedericaChiti/Null_Finder). That
-code is not distributed here; download it and set `FEDERICA_PATH` in the
-notebook. **If `FEDERICA_PATH = None`, Federica's method is not run**: the
-notebook then benchmarks only the installed finder (and any optionally supplied
-local implementation). Since Chiti's routine returns positions but not null
-types, the notebook calculates its classification separately, using the
-Jacobian of Chiti's own trilinear interpolation and the same classification
-rules as this package.
+[`benchmarks/olshevsky2020_null_benchmark.ipynb`](benchmarks/olshevsky2020_null_benchmark.ipynb)
+compares the detected nulls with the 14 known positions and optionally with the
+[Chiti (2020) null finder](https://github.com/FedericaChiti/Null_Finder).
+Chiti's code is not included: set `FEDERICA_PATH` in the notebook to run that
+comparison. Its null classifications are calculated separately in the
+notebook, rather than by the Chiti finder itself.
 
-Note that Table A.1 of the paper prints Y₂ = 0.0117, but the tabulated nulls
-10 and 12 are only reproduced with Y₂ = 0.117, which the notebook uses.
+Table A.1 of Olshevsky et al. (2020) lists `Y₂ = 0.0117`, whereas its
+reported null positions 10 and 12 are reproduced using `Y₂ = 0.117`;
+the benchmark uses the latter value. With one-to-one matching tolerance
+`MATCH_TOL_CELLS = 0.5`, our finder gives:
 
-With a one-to-one matching tolerance of **half a grid spacing**
-(`MATCH_TOL_CELLS = 0.5` in the notebook), the following values refer to
-**our finder**; classification counts do not come from Chiti's original
-function. Re-run the notebook with the same tolerance to reproduce them:
-
-| N³ | Found | Matched | ⟨d⟩ | d_max | Types correct |
-|---|---|---|---|---|---|
+| N³ | Found | Matched (of 14) | Mean error | Max error | Types correct |
+|---:|---:|---:|---:|---:|---:|
 | 20³ | 12 | 11 | 3.07×10⁻² | 1.21×10⁻¹ | 8 |
 | 80³ | 14 | 14 | 4.35×10⁻³ | 1.18×10⁻² | 14 |
 | 512³ | 14 | 14 | 1.06×10⁻⁴ | 3.29×10⁻⁴ | 14 |
 
-`benchmarks/thread_scaling.py` measures how the run time scales with the number
-of Numba threads on the same field at large resolution (1024³ by default, about
-13 GB in float32), checks that the 14 nulls are recovered, and can time Chiti's
-finder on the same data:
+### Reproduce the benchmarks
+
+The thread-scaling script records the time per stage, speedup and parallel
+efficiency. It writes CSV and PNG outputs to the Git-ignored
+`benchmarks/results/` directory by default.
 
 ```bash
-python benchmarks/thread_scaling.py --n 1024 --threads 1,2,4,8,16
-python benchmarks/thread_scaling.py --n 512 --dtype float64 --chiti path/to/null_finder.py
+# Reproduce the 1024³ strong-scaling configuration (TBB must be installed).
+python benchmarks/thread_scaling.py --n 1024 --threads 1,2,4,8,16 \
+  --repeat 7 --threading-layer tbb --chunksize 4
+
+# Optional comparison with Chiti at 512³.
+python benchmarks/thread_scaling.py --n 512 --dtype float64 \
+  --chiti path/to/null_finder.py
 ```
 
-It writes a CSV table and a figure with run times per stage, measured and
-ideal speedup, and parallel efficiency into the git-ignored
-`benchmarks/results/` directory by default. The candidate scan is parallel
-over z planes for Fortran-ordered fields and over x planes for C-ordered fields;
-its relative cost depends on the number of candidate cells and memory layout.
-
-`--threading-layer {default,omp,tbb,workqueue}` selects Numba's parallel backend
-before its parallel runtime starts. `--chunksize N` requests a positive chunk
-size; **Numba's dynamic scheduling requires the TBB threading layer**. The
-script warns when a positive chunk size is requested with another backend.
-Changing the active backend requires a fresh Python process. For example:
-
-```bash
-python benchmarks/thread_scaling.py --n 512 --threads 1,2,4,8 \
-  --threading-layer tbb --chunksize 4
-```
-
-If the OpenMP runtime prints `omp_set_nested routine deprecated`, that warning
-originates in OpenMP, not in the null-finding algorithm. For the Intel OpenMP
-runtime, `KMP_WARNINGS=false` may suppress informational messages; alternatively
-use a supported Numba backend such as TBB if it is installed.
+OpenMP and other Numba backends remain supported; TBB is **optional**.
+Positive `--chunksize` values enable dynamic scheduling only with TBB.
+To switch threading backends, start a new Python process.
 
 ## Experimental Apple Metal benchmark
 
@@ -251,22 +206,6 @@ reproduction commands and the distinction between MLX-backed shared buffers and
 NumPy inputs. The experiment is retained for reference, not recommended as the
 default backend for analyzing stored MHD snapshots.
 
-## Development
-
-```bash
-pip install -e ".[dev]"
-pytest                 # test suite
-ruff check .           # lint (rules in pyproject.toml)
-ruff format --check .  # formatting
-```
-
-CI runs all three on every push and pull request.
-
-The suite covers analytic nulls of every type, close pairs inside one cell,
-nulls on grid nodes, invariance under field and length rescaling, axis
-reversal, memory layout, dtype and chunking, the exclusion test, Poincaré
-accuracy, resolution on anisotropic grids, periodic padding and the stability
-of the result schema.
 
 ## References
 

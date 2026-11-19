@@ -3,21 +3,26 @@
 ## Unreleased
 
 ### Added
-- **Certification of every null** (`certify_depth`, default 12).  After
-  Newton, each refined cell is bisected until every sub-box is proved to
-  hold no root (Bernstein or Krawczyk test) or exactly one (Krawczyk test);
-  a proved root that Newton missed is computed inside its sub-box.  Boxes
-  next to a known root are settled with a Krawczyk test centred on that root.
-  Cells with sub-boxes still undecided at `certify_depth` are counted in the
-  new result key `n_cells_uncertified`.  Before this, multi-start Newton
-  missed about one null in 3×10⁴ in white noise (close pairs in one Newton
-  basin, and seeds dropped by the `max_seed_starts` cap); none are missed now.
+- **Verification of every null** (`certify_depth`, default 12).  After
+  Newton, each refined cell is bisected until every sub-box is shown to hold
+  no root (Bernstein or Krawczyk test) or exactly one (Krawczyk test); a
+  root found this way that Newton missed is computed inside its sub-box.
+  Boxes next to a known root are settled with a Krawczyk test centred on
+  that root.  The tests run in ordinary floating-point arithmetic, without
+  directed rounding: a numerical verification, not a formal proof.  Cells
+  with sub-boxes still undecided at `certify_depth` are counted in the new
+  result key `n_cells_uncertified`.  Before this, multi-start Newton missed
+  about one null in 3×10⁴ in white noise (close pairs in one Newton basin,
+  and seeds dropped by the `max_seed_starts` cap); none are missed now.
 
 ### Changed
 - Defaults `exclusion_depth` 3 → 5 and `max_seed_starts` 64 → 0.  With
-  certification the seeds are redundant, and the deeper exclusion removes
-  more empty cells before Newton.  The total run time is about the same or
-  shorter (turbulent 128³: 0.42 → 0.35 s; white noise 64³: 4.9 → 4.9 s).
+  verification the seeds are redundant, and the deeper exclusion removes
+  more empty cells before Newton.  On a Bifrost snapshot with 226 nulls
+  (medians of ten runs): the same 226 nulls, all cells verified; refinement
+  3.45 → 1.18 ms, of which the verification takes 0.35 ms; total 20.5 →
+  19.8 ms, dominated by the candidate scan.  The Olshevsky et al. (2020)
+  validation table is unchanged.
 
 ### Tests
 - Add `tests/test_newton_completeness.py`, an independent check that every
@@ -26,7 +31,7 @@
   and requires each end point to be a reported null or a nonzero minimum.
   It covers smooth turbulent fields and white noise, including two fields
   where the previous defaults missed nulls, and checks that the oracle does
-  detect misses when certification and seeds are disabled.
+  detect misses when verification and seeds are disabled.
 
 ## 0.1.0 — first public version
 

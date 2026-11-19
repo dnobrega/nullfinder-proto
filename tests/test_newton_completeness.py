@@ -23,7 +23,7 @@ below finds such roots without sharing code with the package:
 The fields are smooth turbulence and white noise, the hardest case (up to
 four roots per cell, close pairs).  noise-337 and noise-384 are fields where
 multi-start Newton alone, as in version 0.1.0, missed nulls of close pairs;
-the certification step finds them.
+the verification step finds them.
 """
 
 import functools
@@ -195,8 +195,8 @@ def test_oracle_detects_missing_roots():
     assert len(undecided) == 0
 
 
-def test_certification_alone_finds_every_root():
-    """Certification finds every root even when the start pattern is crippled."""
+def test_verification_alone_finds_every_root():
+    """Verification finds every root even when the start pattern is crippled."""
     res, bnull, missed, undecided = check("noise-337", max_seed_starts=0, max_iter=2)
     assert bnull.max() < ROOT_REL
     assert len(missed) == 0

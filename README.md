@@ -22,14 +22,17 @@ Centre for Solar Physics, University of Oslo).
 
 ## Features
 
-- **Certified multi-root search.** Sign-change candidates, a rigorous
-  exclusion test (Bernstein subdivision), and multi-start Newton, followed by
-  a certification step: every surviving cell is subdivided until each
-  sub-box is proved to hold no null (Bernstein or Krawczyk test) or exactly
-  one (Krawczyk test), and any proved null that Newton missed is computed.
-  Up to floating-point rounding, every null of the trilinear interpolant is
-  found, including several per cell and close pairs; cells where the proof
-  is not reached at `certify_depth` are counted in `n_cells_uncertified`.
+- **Verified multi-root search.** Sign-change candidates, an exclusion test
+  (Bernstein subdivision), and multi-start Newton, followed by a
+  verification step: every surviving cell is subdivided until each sub-box
+  is shown to hold no null (Bernstein or Krawczyk test) or exactly one
+  (Krawczyk test), and any such null that Newton missed is computed. Every
+  null of the trilinear interpolant is thus found, including several per
+  cell and close pairs. The tests run in ordinary floating-point arithmetic,
+  without directed rounding: this is a numerical verification rather than a
+  formal proof, which could only be fooled where |B| is at the level of
+  rounding error. Cells that cannot be verified at `certify_depth` are
+  counted in `n_cells_uncertified`.
 - **Scale invariant.** All tolerances are relative by default: results do not
   depend on the field or length units.
 - **Any grid orientation and memory layout.** Increasing or decreasing axes,
@@ -130,11 +133,12 @@ res = find_magnetic_nulls(*pad_periodic(bx, by, bz, x, y, z, axes=(0, 1)))
   including multiple nulls within the same grid cell. However, 
   the detection and characterization of degenerate nulls are not guaranteed.
   Degenerate nulls and near-coincident pairs (in our tests, closer than
-  about 0.005 cells) may not be certified at the default `certify_depth=12`;
+  about 0.005 cells) may not be verified at the default `certify_depth=12`;
   such nulls are usually still found, and the cells are counted in
-  `n_cells_uncertified`.  A larger `certify_depth` certifies closer pairs at
+  `n_cells_uncertified`.  A larger `certify_depth` verifies closer pairs at
   little cost, except near line or sheet nulls (e.g. 2.5D fields), where the
-  work per cell grows as `2**certify_depth`.
+  work per cell grows as `2**certify_depth`; `certify_depth=0` turns the
+  verification off.
 
 - The user is responsible for providing finite magnetic-field
   values. To avoid an additional full-volume validation pass,
@@ -186,6 +190,11 @@ the benchmark uses the latter value. With one-to-one matching tolerance
 | 20³ | 12 | 11 | 3.07×10⁻² | 1.21×10⁻¹ | 8 |
 | 80³ | 14 | 14 | 4.35×10⁻³ | 1.18×10⁻² | 14 |
 | 512³ | 14 | 14 | 1.06×10⁻⁴ | 3.29×10⁻⁴ | 14 |
+
+These values are the same with and without the verification step, and no
+cell is left unverified at any resolution. The exact nulls not recovered at
+20³ are therefore absent from the trilinear interpolant at that resolution,
+not missed by the search.
 
 ### Reproduce the benchmarks
 

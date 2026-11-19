@@ -19,10 +19,13 @@ Pipeline
 4. Multi-start Newton refinement of the trilinear field inside each
    surviving cell, from a fixed 27-point pattern, with a residual-decreasing
    line search.  It finds nearly every root quickly.
-5. Certification by subdivision: each surviving cell is bisected until every
-   sub-box is proved to hold no root (Bernstein or Krawczyk test) or exactly
-   one (Krawczyk test).  A proved root that Newton did not find is computed
-   inside its sub-box.  Sub-boxes still undecided at ``certify_depth`` are
+5. Verification by subdivision: each surviving cell is bisected until every
+   sub-box is shown to hold no root (Bernstein or Krawczyk test) or exactly
+   one (Krawczyk test).  A root found this way that Newton missed is
+   computed inside its sub-box.  The tests use ordinary floating-point
+   arithmetic, without directed rounding, so this is a numerical
+   verification, not a formal proof.  Sub-boxes still undecided at
+   ``certify_depth`` are
    counted (``n_cells_uncertified``); they occur only near degenerate nulls
    and near-coincident pairs.  Several distinct roots per cell are retained
    up to ``max_roots_per_cell``; roots beyond that storage limit are
@@ -886,7 +889,7 @@ def _surviving_leaf_centres(bx, by, bz, i, j, k, max_depth, eps, out):
 def _newton_free(bx, by, bz, i, j, k, q0, q1, q2, eps, max_iter, B, Jq):
     """Plain Newton on the cell polynomial, not restricted to the cell.
 
-    Used inside a box where the Krawczyk test has proved a unique root, so no
+    Used inside a box where the Krawczyk test has shown a unique root, so no
     safeguards are needed.  Returns ok, q0, q1, q2.
     """
     for _ in range(max_iter + 1):
@@ -909,12 +912,14 @@ def _newton_free(bx, by, bz, i, j, k, q0, q1, q2, eps, max_iter, B, Jq):
 def _krawczyk(bx, by, bz, i, j, k, c0, c1, c2, w0, w1, w2, B, Jq, Ainv):
     """Krawczyk test on the box of centre c and half-widths w (cell q units).
 
-    Returns 0 if the cube provably holds no root, 1 if it provably holds
-    exactly one, and 2 if the test is inconclusive.  The Krawczyk operator is
-    K = p + (I - A J(cube)) (cube - c) with p = c - A B(c), A = J(c)^-1; K
-    inside the cube proves a unique root, K disjoint from it proves none.
+    Returns 0 if the box holds no root, 1 if it holds exactly one, and 2 if
+    the test is inconclusive.  The Krawczyk operator is
+    K = p + (I - A J(box)) (box - c) with p = c - A B(c), A = J(c)^-1; K
+    inside the box implies a unique root, K disjoint from it implies none.
     The entries of A J(q) are multilinear in q, so their extremes over the
-    box are attained at its corners and the interval enclosure is exact.
+    box are attained at its corners and the enclosure is exact in exact
+    arithmetic.  Here it is evaluated in ordinary floating point, without
+    directed rounding.
     """
     _trilinear_value_and_jac_cell(bx, by, bz, i, j, k, c0, c1, c2, B, Jq)
     a00, a01, a02 = Jq[0, 0], Jq[0, 1], Jq[0, 2]
@@ -1028,7 +1033,7 @@ def _certify_cell(
     """Account for every root of the cell by subdivision.
 
     Each sub-box is (a) excluded by the Bernstein test, (b) excluded by the
-    Krawczyk test, (c) proved by the Krawczyk test to hold exactly one root,
+    Krawczyk test, (c) shown by the Krawczyk test to hold exactly one root,
     which is then either already known or found by Newton, or (d) split.
     Sub-boxes still inconclusive at ``max_depth`` are counted as unresolved;
     they occur near degenerate nulls and near-coincident pairs.
@@ -2336,15 +2341,17 @@ def find_magnetic_nulls(
     max_seed_starts : int
         Besides the fixed 27-point start pattern, Newton is also started from
         the centres of up to this many sub-boxes of depth ``exclusion_depth``
-        that survive the exclusion test (default 0).  With certification on,
+        that survive the exclusion test (default 0).  With verification on,
         these extra starts only change speed; without it (``certify_depth=0``)
         they recover roots near cell faces that the fixed pattern can miss.
     certify_depth : int
-        After the Newton starts, every refined cell is subdivided until each
-        sub-box is proved to hold no root (Bernstein or Krawczyk test) or
-        exactly one (Krawczyk test).  A proved root that no start found is
-        then computed with Newton inside its sub-box, so the starts only
-        affect speed, not which nulls are found.  Sub-boxes still undecided
+        Verification depth.  After the Newton starts, every refined cell is
+        subdivided until each sub-box is shown to hold no root (Bernstein or
+        Krawczyk test) or exactly one (Krawczyk test), in floating-point
+        arithmetic without directed rounding.  A root found this way that no
+        start found is then computed with Newton inside its sub-box, so the
+        starts only affect speed, not which nulls are found.  Sub-boxes
+        still undecided
         at this depth (edge ``2**-certify_depth`` cells) are counted in
         ``n_cells_uncertified``; they occur only near degenerate nulls and
         near-coincident pairs (closer than about 0.005 cells in tests at the

@@ -22,11 +22,14 @@ Centre for Solar Physics, University of Oslo).
 
 ## Features
 
-- **Robust multi-root search.** Sign-change candidates, a rigorous exclusion
-  test (Bernstein subdivision), and multi-start Newton seeded from surviving
-  sub-boxes. Multiple roots per cell can be found, including roots near cell
-  faces. The exclusion test can certify that a cell has no roots; Newton is
-  not a mathematical guarantee of finding every root in a surviving cell.
+- **Certified multi-root search.** Sign-change candidates, a rigorous
+  exclusion test (Bernstein subdivision), and multi-start Newton, followed by
+  a certification step: every surviving cell is subdivided until each
+  sub-box is proved to hold no null (Bernstein or Krawczyk test) or exactly
+  one (Krawczyk test), and any proved null that Newton missed is computed.
+  Up to floating-point rounding, every null of the trilinear interpolant is
+  found, including several per cell and close pairs; cells where the proof
+  is not reached at `certify_depth` are counted in `n_cells_uncertified`.
 - **Scale invariant.** All tolerances are relative by default: results do not
   depend on the field or length units.
 - **Any grid orientation and memory layout.** Increasing or decreasing axes,
@@ -126,6 +129,12 @@ res = find_magnetic_nulls(*pad_periodic(bx, by, bz, x, y, z, axes=(0, 1)))
 - The finder detects magnetic null points of the trilinear interpolant,
   including multiple nulls within the same grid cell. However, 
   the detection and characterization of degenerate nulls are not guaranteed.
+  Degenerate nulls and near-coincident pairs (in our tests, closer than
+  about 0.005 cells) may not be certified at the default `certify_depth=12`;
+  such nulls are usually still found, and the cells are counted in
+  `n_cells_uncertified`.  A larger `certify_depth` certifies closer pairs at
+  little cost, except near line or sheet nulls (e.g. 2.5D fields), where the
+  work per cell grows as `2**certify_depth`.
 
 - The user is responsible for providing finite magnetic-field
   values. To avoid an additional full-volume validation pass,

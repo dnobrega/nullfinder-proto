@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Certification of every null** (`certify_depth`, default 12).  After
+  Newton, each refined cell is bisected until every sub-box is proved to
+  hold no root (Bernstein or Krawczyk test) or exactly one (Krawczyk test);
+  a proved root that Newton missed is computed inside its sub-box.  Boxes
+  next to a known root are settled with a Krawczyk test centred on that root.
+  Cells with sub-boxes still undecided at `certify_depth` are counted in the
+  new result key `n_cells_uncertified`.  Before this, multi-start Newton
+  missed about one null in 3×10⁴ in white noise (close pairs in one Newton
+  basin, and seeds dropped by the `max_seed_starts` cap); none are missed now.
+
+### Changed
+- Defaults `exclusion_depth` 3 → 5 and `max_seed_starts` 64 → 0.  With
+  certification the seeds are redundant, and the deeper exclusion removes
+  more empty cells before Newton.  The total run time is about the same or
+  shorter (turbulent 128³: 0.42 → 0.35 s; white noise 64³: 4.9 → 4.9 s).
+
+### Tests
+- Add `tests/test_newton_completeness.py`, an independent check that every
+  root of the trilinear interpolant is reported.  It subdivides every cell to
+  1/1024 of a cell, minimises |B| from each sub-box that cannot be excluded,
+  and requires each end point to be a reported null or a nonzero minimum.
+  It covers smooth turbulent fields and white noise, including two fields
+  where the previous defaults missed nulls, and checks that the oracle does
+  detect misses when certification and seeds are disabled.
+
 ## 0.1.0 — first public version
 
 Changes with respect to the original single-file `null_finder.py`. The

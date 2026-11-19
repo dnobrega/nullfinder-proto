@@ -16,15 +16,20 @@ Pipeline
    sub-box lies in the convex hull of the sub-box vertex values.  Candidate
    cells are recursively bisected and the sign-change test is re-applied; if
    no sub-box survives, the cell provably has no root and Newton is skipped.
-4. Robust multi-start Newton refinement of the trilinear field inside each
-   surviving cell, with a residual-decreasing line search.  Starts are a
-   fixed 27-point pattern plus the centres of the sub-boxes that survive the
-   exclusion test, improving recovery of roots near cell faces.  Several
-   distinct roots per cell are retained up to ``max_roots_per_cell``; roots
-   beyond that storage limit are discarded with a warning.
-5. Same-charge duplicate roots (the same null seen from neighbouring cells or
+4. Multi-start Newton refinement of the trilinear field inside each
+   surviving cell, from a fixed 27-point pattern, with a residual-decreasing
+   line search.  It finds nearly every root quickly.
+5. Certification by subdivision: each surviving cell is bisected until every
+   sub-box is proved to hold no root (Bernstein or Krawczyk test) or exactly
+   one (Krawczyk test).  A proved root that Newton did not find is computed
+   inside its sub-box.  Sub-boxes still undecided at ``certify_depth`` are
+   counted (``n_cells_uncertified``); they occur only near degenerate nulls
+   and near-coincident pairs.  Several distinct roots per cell are retained
+   up to ``max_roots_per_cell``; roots beyond that storage limit are
+   discarded with a warning.
+6. Same-charge duplicate roots (the same null seen from neighbouring cells or
    from different starts) are merged with a local grid-scale tolerance.
-6. Diagnostics: topological charge ``sign(det J)``, an adaptive Poincare index
+7. Diagnostics: topological charge ``sign(det J)``, an adaptive Poincare index
    per null cell, eigen-classification (A, B, As, Bs), spine/fan geometry,
    current and divergence diagnostics, and opposite-charge pair resolution
    measured in grid cells.
@@ -877,6 +882,282 @@ def _surviving_leaf_centres(bx, by, bz, i, j, k, max_depth, eps, out):
     return nout
 
 
+@njit(cache=NUMBA_CACHE, fastmath=FASTMATH)
+def _newton_free(bx, by, bz, i, j, k, q0, q1, q2, eps, max_iter, B, Jq):
+    """Plain Newton on the cell polynomial, not restricted to the cell.
+
+    Used inside a box where the Krawczyk test has proved a unique root, so no
+    safeguards are needed.  Returns ok, q0, q1, q2.
+    """
+    for _ in range(max_iter + 1):
+        _trilinear_value_and_jac_cell(bx, by, bz, i, j, k, q0, q1, q2, B, Jq)
+        if np.sqrt(B[0] * B[0] + B[1] * B[1] + B[2] * B[2]) <= eps:
+            return True, q0, q1, q2
+        B[0] = -B[0]
+        B[1] = -B[1]
+        B[2] = -B[2]
+        ok, d0, d1, d2, _det = _solve_3x3_scalars(Jq, B, 0.0, 0.0)
+        if not ok:
+            return False, q0, q1, q2
+        q0 += d0
+        q1 += d1
+        q2 += d2
+    return False, q0, q1, q2
+
+
+@njit(cache=NUMBA_CACHE, fastmath=FASTMATH)
+def _krawczyk(bx, by, bz, i, j, k, c0, c1, c2, w0, w1, w2, B, Jq, Ainv):
+    """Krawczyk test on the box of centre c and half-widths w (cell q units).
+
+    Returns 0 if the cube provably holds no root, 1 if it provably holds
+    exactly one, and 2 if the test is inconclusive.  The Krawczyk operator is
+    K = p + (I - A J(cube)) (cube - c) with p = c - A B(c), A = J(c)^-1; K
+    inside the cube proves a unique root, K disjoint from it proves none.
+    The entries of A J(q) are multilinear in q, so their extremes over the
+    box are attained at its corners and the interval enclosure is exact.
+    """
+    _trilinear_value_and_jac_cell(bx, by, bz, i, j, k, c0, c1, c2, B, Jq)
+    a00, a01, a02 = Jq[0, 0], Jq[0, 1], Jq[0, 2]
+    a10, a11, a12 = Jq[1, 0], Jq[1, 1], Jq[1, 2]
+    a20, a21, a22 = Jq[2, 0], Jq[2, 1], Jq[2, 2]
+    det = (
+        a00 * (a11 * a22 - a12 * a21)
+        - a01 * (a10 * a22 - a12 * a20)
+        + a02 * (a10 * a21 - a11 * a20)
+    )
+    if not (np.abs(det) > 0.0) or not np.isfinite(det):
+        return 2
+    inv = 1.0 / det
+    Ainv[0, 0] = (a11 * a22 - a12 * a21) * inv
+    Ainv[0, 1] = (a02 * a21 - a01 * a22) * inv
+    Ainv[0, 2] = (a01 * a12 - a02 * a11) * inv
+    Ainv[1, 0] = (a12 * a20 - a10 * a22) * inv
+    Ainv[1, 1] = (a00 * a22 - a02 * a20) * inv
+    Ainv[1, 2] = (a02 * a10 - a00 * a12) * inv
+    Ainv[2, 0] = (a10 * a21 - a11 * a20) * inv
+    Ainv[2, 1] = (a01 * a20 - a00 * a21) * inv
+    Ainv[2, 2] = (a00 * a11 - a01 * a10) * inv
+    p0 = c0 - (Ainv[0, 0] * B[0] + Ainv[0, 1] * B[1] + Ainv[0, 2] * B[2])
+    p1 = c1 - (Ainv[1, 0] * B[0] + Ainv[1, 1] * B[1] + Ainv[1, 2] * B[2])
+    p2 = c2 - (Ainv[2, 0] * B[0] + Ainv[2, 1] * B[1] + Ainv[2, 2] * B[2])
+
+    # Largest |I - A J| entry over the 8 corners, weighted by the half-widths.
+    m00 = m01 = m02 = m10 = m11 = m12 = m20 = m21 = m22 = 0.0
+    for c in range(8):
+        _trilinear_value_and_jac_cell(
+            bx,
+            by,
+            bz,
+            i,
+            j,
+            k,
+            c0 + w0 * (2 * (c & 1) - 1),
+            c1 + w1 * (2 * ((c >> 1) & 1) - 1),
+            c2 + w2 * (2 * ((c >> 2) & 1) - 1),
+            B,
+            Jq,
+        )
+        for r in range(3):
+            e0 = Ainv[r, 0] * Jq[0, 0] + Ainv[r, 1] * Jq[1, 0] + Ainv[r, 2] * Jq[2, 0]
+            e1 = Ainv[r, 0] * Jq[0, 1] + Ainv[r, 1] * Jq[1, 1] + Ainv[r, 2] * Jq[2, 1]
+            e2 = Ainv[r, 0] * Jq[0, 2] + Ainv[r, 1] * Jq[1, 2] + Ainv[r, 2] * Jq[2, 2]
+            if r == 0:
+                m00 = max(m00, abs(1.0 - e0))
+                m01 = max(m01, abs(e1))
+                m02 = max(m02, abs(e2))
+            elif r == 1:
+                m10 = max(m10, abs(e0))
+                m11 = max(m11, abs(1.0 - e1))
+                m12 = max(m12, abs(e2))
+            else:
+                m20 = max(m20, abs(e0))
+                m21 = max(m21, abs(e1))
+                m22 = max(m22, abs(1.0 - e2))
+    r0 = m00 * w0 + m01 * w1 + m02 * w2
+    r1 = m10 * w0 + m11 * w1 + m12 * w2
+    r2 = m20 * w0 + m21 * w1 + m22 * w2
+    if not (np.isfinite(r0) and np.isfinite(r1) and np.isfinite(r2)):
+        return 2
+
+    if (
+        p0 - r0 > c0 + w0
+        or p0 + r0 < c0 - w0
+        or p1 - r1 > c1 + w1
+        or p1 + r1 < c1 - w1
+        or p2 - r2 > c2 + w2
+        or p2 + r2 < c2 - w2
+    ):
+        return 0
+    if (
+        p0 - r0 > c0 - w0
+        and p0 + r0 < c0 + w0
+        and p1 - r1 > c1 - w1
+        and p1 + r1 < c1 + w1
+        and p2 - r2 > c2 - w2
+        and p2 + r2 < c2 + w2
+    ):
+        return 1
+    return 2
+
+
+# Sub-boxes are tested inflated by this fraction of their edge on each side,
+# so that a root on a shared face is interior to the tested box.
+CERTIFY_INFLATION = 1.0 / 16.0
+
+
+@njit(cache=NUMBA_CACHE, fastmath=FASTMATH)
+def _certify_cell(
+    bx,
+    by,
+    bz,
+    i,
+    j,
+    k,
+    max_depth,
+    eps,
+    max_iter,
+    q_tol,
+    null_q,
+    base,
+    nroots,
+    new_q,
+    B,
+    Jq,
+    Ainv,
+):
+    """Account for every root of the cell by subdivision.
+
+    Each sub-box is (a) excluded by the Bernstein test, (b) excluded by the
+    Krawczyk test, (c) proved by the Krawczyk test to hold exactly one root,
+    which is then either already known or found by Newton, or (d) split.
+    Sub-boxes still inconclusive at ``max_depth`` are counted as unresolved;
+    they occur near degenerate nulls and near-coincident pairs.
+
+    Known roots are ``null_q[base:base+nroots]``.  New roots (cell q units,
+    possibly slightly outside [0, 1]) are written to ``new_q``.
+    Returns (number of new roots, number of unresolved sub-boxes).
+    """
+    cap = 7 * max_depth + 8
+    stack = np.empty((cap, 5), dtype=WORK_DTYPE)
+    stack[0, 0] = 0.0
+    stack[0, 1] = 0.0
+    stack[0, 2] = 0.0
+    stack[0, 3] = 1.0
+    stack[0, 4] = 0.0
+    top = 1
+    nnew = 0
+    unresolved = 0
+    while top > 0:
+        top -= 1
+        q0 = stack[top, 0]
+        q1 = stack[top, 1]
+        q2 = stack[top, 2]
+        h = stack[top, 3]
+        depth = int(stack[top, 4])
+        if not _subbox_component_may_vanish(bx, i, j, k, q0, q1, q2, h, eps):
+            continue
+        if not _subbox_component_may_vanish(by, i, j, k, q0, q1, q2, h, eps):
+            continue
+        if not _subbox_component_may_vanish(bz, i, j, k, q0, q1, q2, h, eps):
+            continue
+
+        c0 = q0 + 0.5 * h
+        c1 = q1 + 0.5 * h
+        c2 = q2 + 0.5 * h
+        w = h * (0.5 + CERTIFY_INFLATION)
+        verdict = _krawczyk(bx, by, bz, i, j, k, c0, c1, c2, w, w, w, B, Jq, Ainv)
+        if verdict == 0:
+            continue
+        if verdict == 2:
+            # A box next to a known root is often undecided at every depth:
+            # the root sits just outside it (or on its edge), so K overlaps
+            # the box.  Test instead a box centred on the root that covers
+            # this one: if it has a unique root, that is the known one, and
+            # this box holds no other.  Centred on the root, the test only
+            # needs ||I - A J|| < 1 instead of a margin to the box faces.
+            for r in range(nroots + nnew):
+                if r < nroots:
+                    d0 = null_q[base + r, 0]
+                    d1 = null_q[base + r, 1]
+                    d2 = null_q[base + r, 2]
+                else:
+                    d0 = new_q[r - nroots, 0]
+                    d1 = new_q[r - nroots, 1]
+                    d2 = new_q[r - nroots, 2]
+                if abs(d0 - c0) > 2 * w or abs(d1 - c1) > 2 * w or abs(d2 - c2) > 2 * w:
+                    continue
+                f = 1.0 + CERTIFY_INFLATION
+                hull = _krawczyk(
+                    bx,
+                    by,
+                    bz,
+                    i,
+                    j,
+                    k,
+                    d0,
+                    d1,
+                    d2,
+                    f * (abs(c0 - d0) + w),
+                    f * (abs(c1 - d1) + w),
+                    f * (abs(c2 - d2) + w),
+                    B,
+                    Jq,
+                    Ainv,
+                )
+                if hull == 1:
+                    verdict = 0
+                    break
+            if verdict == 0:
+                continue
+        if verdict == 1:
+            # The unique root of the inflated box: known already?
+            known = False
+            for r in range(nroots + nnew):
+                if r < nroots:
+                    d0 = null_q[base + r, 0]
+                    d1 = null_q[base + r, 1]
+                    d2 = null_q[base + r, 2]
+                else:
+                    d0 = new_q[r - nroots, 0]
+                    d1 = new_q[r - nroots, 1]
+                    d2 = new_q[r - nroots, 2]
+                if abs(d0 - c0) <= w and abs(d1 - c1) <= w and abs(d2 - c2) <= w:
+                    known = True
+                    break
+            if known:
+                continue
+            ok, r0, r1, r2 = _newton_free(
+                bx, by, bz, i, j, k, c0, c1, c2, eps, max_iter, B, Jq
+            )
+            if ok and abs(r0 - c0) <= w and abs(r1 - c1) <= w and abs(r2 - c2) <= w:
+                # Keep it only if it lies in this (closed) cell; a root in the
+                # inflation margin outside the cell belongs to a neighbour.
+                if (
+                    -q_tol <= r0 <= 1.0 + q_tol
+                    and -q_tol <= r1 <= 1.0 + q_tol
+                    and -q_tol <= r2 <= 1.0 + q_tol
+                    and nnew < new_q.shape[0]
+                ):
+                    new_q[nnew, 0] = r0
+                    new_q[nnew, 1] = r1
+                    new_q[nnew, 2] = r2
+                    nnew += 1
+                continue
+            # Newton failed despite the proof (rounding): fall through, split.
+        if depth >= max_depth:
+            unresolved += 1
+            continue
+        hh = 0.5 * h
+        for c in range(8):
+            stack[top, 0] = q0 + hh * (c & 1)
+            stack[top, 1] = q1 + hh * ((c >> 1) & 1)
+            stack[top, 2] = q2 + hh * ((c >> 2) & 1)
+            stack[top, 3] = hh
+            stack[top, 4] = depth + 1
+            top += 1
+    return nnew, unresolved
+
+
 @njit(parallel=True, cache=NUMBA_CACHE, fastmath=FASTMATH)
 def _refine_candidates(
     bx,
@@ -894,6 +1175,7 @@ def _refine_candidates(
     det_tol_rel,
     seed_depth,
     max_seeds,
+    certify_depth,
     max_roots_per_cell,
     root_duplicate_q_tol,
 ):
@@ -901,6 +1183,8 @@ def _refine_candidates(
 
     Starts: the fixed 27-point pattern, then (if ``seed_depth > 0``) the
     centres of up to ``max_seeds`` surviving sub-boxes of the exclusion test.
+    If ``certify_depth > 0``, ``_certify_cell`` then accounts for every root
+    of the cell and adds those the starts missed.
 
     Output storage is n_candidates * max_roots_per_cell slots; slot
     ``m*max_roots_per_cell + r`` holds root r of candidate m.
@@ -916,6 +1200,7 @@ def _refine_candidates(
     cand_nroots = np.zeros(n, dtype=np.int32)
     cand_attempts = np.zeros(n, dtype=np.int32)
     cand_overflow = np.zeros(n, dtype=np.bool_)
+    cand_unresolved = np.zeros(n, dtype=np.int32)
 
     for m in prange(n):
         i = candidates[m, 0]
@@ -1006,6 +1291,78 @@ def _refine_candidates(
                 for b in range(3):
                     jacs[slot, a, b] = Jp[a, b]
             nroots += 1
+
+        if certify_depth > 0:
+            Ainv = np.empty((3, 3), dtype=WORK_DTYPE)
+            new_q = np.empty((max_roots_per_cell, 3), dtype=WORK_DTYPE)
+            nnew, cand_unresolved[m] = _certify_cell(
+                bx,
+                by,
+                bz,
+                i,
+                j,
+                k,
+                certify_depth,
+                b_tol_eff,
+                max_iter,
+                q_tol,
+                null_q,
+                base,
+                nroots,
+                new_q,
+                B,
+                Jq,
+                Ainv,
+            )
+            for s in range(nnew):
+                # Already a root: this only clamps it to the closed cell and
+                # computes the physical Jacobian.
+                ok, xn, yn, zn, qx, qy, qz, bn = _refine_null_in_cell_from_start(
+                    bx,
+                    by,
+                    bz,
+                    x,
+                    y,
+                    z,
+                    i,
+                    j,
+                    k,
+                    new_q[s, 0],
+                    new_q[s, 1],
+                    new_q[s, 2],
+                    max_iter,
+                    b_tol_eff,
+                    q_tol,
+                    det_tol_abs,
+                    det_tol_rel,
+                    B,
+                    Jq,
+                    Jp,
+                    Bt,
+                    Jt,
+                )
+                if not ok:
+                    continue
+                if not _root_is_new_in_cell(
+                    base, nroots, qx, qy, qz, null_q, root_duplicate_q_tol
+                ):
+                    continue
+                if nroots >= max_roots_per_cell:
+                    cand_overflow[m] = True
+                    continue
+                slot = base + nroots
+                found_mask[slot] = True
+                null_pos[slot, 0] = xn
+                null_pos[slot, 1] = yn
+                null_pos[slot, 2] = zn
+                null_q[slot, 0] = qx
+                null_q[slot, 1] = qy
+                null_q[slot, 2] = qz
+                bnorms[slot] = bn
+                for a in range(3):
+                    for b in range(3):
+                        jacs[slot, a, b] = Jp[a, b]
+                nroots += 1
         cand_nroots[m] = nroots
 
     return (
@@ -1017,6 +1374,7 @@ def _refine_candidates(
         cand_nroots,
         cand_attempts,
         cand_overflow,
+        cand_unresolved,
     )
 
 
@@ -1047,13 +1405,14 @@ def _refine_in_chunks(
     n_with_root = 0
     n_attempts = 0
     n_overflow = 0
+    n_uncertified = 0
     nthreads = numba.get_num_threads()
     try:
         if not parallel:
             numba.set_num_threads(1)
         for start in range(0, n, chunk_size):
             chunk = np.ascontiguousarray(candidates[start : start + chunk_size])
-            fm, p, qq, bn, jj, nroots, attempts, over = _refine_candidates(
+            fm, p, qq, bn, jj, nroots, attempts, over, unres = _refine_candidates(
                 bx, by, bz, x, y, z, chunk, *kernel_args
             )
             pos.append(p[fm])
@@ -1064,6 +1423,7 @@ def _refine_in_chunks(
             n_with_root += int(np.count_nonzero(nroots))
             n_attempts += int(attempts.sum())
             n_overflow += int(np.count_nonzero(over))
+            n_uncertified += int(np.count_nonzero(unres))
     finally:
         numba.set_num_threads(nthreads)
 
@@ -1077,6 +1437,7 @@ def _refine_in_chunks(
             n_with_root,
             n_attempts,
             n_overflow,
+            n_uncertified,
         )
     return (
         np.empty((0, 3)),
@@ -1084,6 +1445,7 @@ def _refine_in_chunks(
         np.empty((0, 3)),
         np.empty(0),
         np.empty((0, 3, 3)),
+        0,
         0,
         0,
         0,
@@ -1918,8 +2280,9 @@ def find_magnetic_nulls(
     q_tol=1.0e-6,
     det_tol=0.0,
     det_tol_rel=1.0e-14,
-    exclusion_depth=3,
-    max_seed_starts=64,
+    exclusion_depth=5,
+    max_seed_starts=0,
+    certify_depth=12,
     poincare_diag=True,
     poincare_max_depth=6,
     poincare_max_angle_deg=45.0,
@@ -1973,9 +2336,21 @@ def find_magnetic_nulls(
     max_seed_starts : int
         Besides the fixed 27-point start pattern, Newton is also started from
         the centres of up to this many sub-boxes of depth ``exclusion_depth``
-        that survive the exclusion test.  Every root lies in one of them, so
-        this recovers roots near cell faces that the fixed pattern can miss
-        (e.g. the second root of a close pair).  0 disables it.
+        that survive the exclusion test (default 0).  With certification on,
+        these extra starts only change speed; without it (``certify_depth=0``)
+        they recover roots near cell faces that the fixed pattern can miss.
+    certify_depth : int
+        After the Newton starts, every refined cell is subdivided until each
+        sub-box is proved to hold no root (Bernstein or Krawczyk test) or
+        exactly one (Krawczyk test).  A proved root that no start found is
+        then computed with Newton inside its sub-box, so the starts only
+        affect speed, not which nulls are found.  Sub-boxes still undecided
+        at this depth (edge ``2**-certify_depth`` cells) are counted in
+        ``n_cells_uncertified``; they occur only near degenerate nulls and
+        near-coincident pairs (closer than about 0.005 cells in tests at the
+        default depth), whose nulls Newton usually still finds.  Near line or
+        sheet nulls the work per cell grows as ``2**certify_depth``.  0
+        disables it.
     poincare_diag : bool
         Compute the Poincare index of each null cell as a diagnostic.
     poincare_max_depth : int
@@ -2117,7 +2492,9 @@ def find_magnetic_nulls(
             ``n_candidates_with_success``, ``n_candidates_failed`` (refined
             cells with and without roots); ``n_newton_attempts``;
             ``n_roots_before_dedup``; ``n_duplicates_removed``;
-            ``n_cells_root_overflow``; ``timing`` (seconds per stage);
+            ``n_cells_root_overflow``; ``n_cells_uncertified`` (cells with
+            sub-boxes undecided at ``certify_depth``); ``timing`` (seconds
+            per stage);
             ``settings`` (parameters actually used).
 
     Notes
@@ -2142,6 +2519,9 @@ def find_magnetic_nulls(
     max_seed_starts = int(max_seed_starts)
     if max_seed_starts < 0:
         raise ValueError("max_seed_starts must be >= 0.")
+    certify_depth = int(certify_depth)
+    if not 0 <= certify_depth <= 40:
+        raise ValueError("certify_depth must be between 0 and 40.")
     chunk_size = int(chunk_size)
     if chunk_size < 1:
         raise ValueError("chunk_size must be >= 1.")
@@ -2209,11 +2589,22 @@ def find_magnetic_nulls(
         float(det_tol_rel),
         exclusion_depth,
         int(max_seed_starts),
+        int(certify_depth),
         max_roots_per_cell,
         float(root_duplicate_q_tol),
     )
     t0 = time.perf_counter()
-    pos, cell, q, bnorm, jac, n_with_root, n_attempts, n_overflow = _refine_in_chunks(
+    (
+        pos,
+        cell,
+        q,
+        bnorm,
+        jac,
+        n_with_root,
+        n_attempts,
+        n_overflow,
+        n_uncertified,
+    ) = _refine_in_chunks(
         bx, by, bz, x, y, z, refine_cells, chunk_size, do_parallel, kernel_args
     )
     t_refine = time.perf_counter() - t0
@@ -2295,6 +2686,7 @@ def find_magnetic_nulls(
         "n_roots_before_dedup": int(n_roots_before_dedup),
         "n_duplicates_removed": int(n_dup),
         "n_cells_root_overflow": int(n_overflow),
+        "n_cells_uncertified": int(n_uncertified),
     }
 
     t0 = time.perf_counter()
@@ -2329,6 +2721,7 @@ def find_magnetic_nulls(
         "det_tol_rel": float(det_tol_rel),
         "exclusion_depth": exclusion_depth,
         "max_seed_starts": max_seed_starts,
+        "certify_depth": certify_depth,
         "poincare_diag": poincare_diag,
         "poincare_max_depth": poincare_max_depth,
         "poincare_max_angle_deg": float(poincare_max_angle_deg),
@@ -2365,6 +2758,12 @@ def find_magnetic_nulls(
             f"cells with roots {n_with_root}, roots {n_roots_before_dedup}, "
             f"duplicates removed {n_dup}"
         )
+        if n_uncertified:
+            print(
+                f"[null finder] {n_uncertified} cell(s) with sub-boxes undecided "
+                f"at certify_depth={certify_depth} (degenerate nulls or "
+                "near-coincident pairs)"
+            )
         if n_overflow:
             print(
                 "[null finder] WARNING: max_roots_per_cell reached in "

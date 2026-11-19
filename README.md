@@ -152,19 +152,20 @@ res = find_magnetic_nulls(*pad_periodic(bx, by, bz, x, y, z, axes=(0, 1)))
 The current `nullfinder-proto` implementation was benchmarked on the
 14-null analytic magnetic field of Olshevsky et al. (2020), sampled on a
 `1024³` grid (`float32`, approximately 12.9 GB of field data). Measurements
-were made on Apple Silicon using Numba with **TBB**, dynamic scheduling
-(`chunksize=4`), and seven timed repetitions after warm-up. Times are medians
-for the **complete null search** (not just the candidate scan), excluding
+were made on Apple Silicon (18 cores) using Numba with **TBB**, dynamic
+scheduling (`chunksize=4`), and seven timed repetitions after warm-up. Times
+are medians for the **complete null search** (not just the candidate scan), excluding
 field generation and JIT compilation. All runs recovered and correctly
-classified the 14 nulls.
+classified the 14 nulls, with the default verification step on; the
+candidate scan takes over 98% of the time.
 
 | Numba threads | Time (s) | Speedup | Parallel efficiency |
 |---:|---:|---:|---:|
-| 1 | 0.812 | 1.00× | 100% |
-| 2 | 0.408 | 1.99× | 100% |
-| 4 | 0.213 | 3.82× | 95% |
-| 8 | 0.122 | 6.66× | 83% |
-| 16 | **0.069** | **11.81×** | **74%** |
+| 1 | 0.852 | 1.00× | 100% |
+| 2 | 0.433 | 1.97× | 98% |
+| 4 | 0.222 | 3.84× | 96% |
+| 8 | 0.130 | 6.57× | 82% |
+| 16 | **0.070** | **12.23×** | **76%** |
 
 The scan uses a compact bit mask (approximately one bit per cell); at this
 resolution its mask requires about 134 MB. These timings are specific to the

@@ -24,6 +24,10 @@
   19.8 ms, dominated by the candidate scan.  The Olshevsky et al. (2020)
   validation table is unchanged.
 
+### Documentation
+- Strong-scaling table (Olshevsky field, 1024³) re-measured with the new
+  defaults: 0.852 s on 1 thread, 0.070 s on 16 (12.2×, 76% efficiency).
+
 ### Tests
 - Add `tests/test_newton_completeness.py`, an independent check that every
   root of the trilinear interpolant is reported.  It subdivides every cell to
